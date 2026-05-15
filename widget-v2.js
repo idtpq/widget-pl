@@ -135,7 +135,7 @@
     }
   `;
 
-  let open = false, busy = false, started = false, leadSent = false;
+  let open = false, busy = false, started = false;
   let hist = [];
   let ses  = { name: null, contact: null, price: null, product: null, address: null, addressSent: false };
 
@@ -332,17 +332,17 @@
 
       addBot(reply); addTime();
 
-      // Відправляємо лід з затримкою — щоб встигла прийти адреса
-      if (ses.contact && !leadSent) {
-        leadSent = true;
-        // Чекаємо 12 сек — якщо за цей час прийде адреса, відправимо разом
-        setTimeout(() => { sendLead(); }, 12000);
+      // Дебаунс 3 сек — скільки б даних не прийшло в одному/кількох повідомленнях,
+      // відправляємо ОДИН раз після паузи
+      if (ses.contact && !ses.leadSent) {
+        ses.leadSent = true;
       }
-      // Якщо адреса прийшла після відправки — оновлюємо
-      if (ses.address && !ses.addressSent && leadSent) {
-        ses.addressSent = true;
-        clearTimeout(ses._leadTimer);
-        sendLead();
+      if (ses.leadSent) {
+        if (ses._leadTimer) clearTimeout(ses._leadTimer);
+        ses._leadTimer = setTimeout(() => {
+          ses._leadTimer = null;
+          sendLead();
+        }, 3000);
       }
 
     } catch {
