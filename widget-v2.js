@@ -1,24 +1,10 @@
-/**
- * Elastyczne Szkło — Chat Widget
- * Підключення на сайт (перед </body>):
- *
- *   <script src="https://plain-bush-fa6chatbotfilmfy.gavreliuk54.workers.dev/widget.js" defer></script>
- *
- * АБО якщо файл лежить окремо:
- *   <script src="/widget.js" defer></script>
- *
- * WORKER_URL нижче — замінити на свій Cloudflare Worker
- */
 (function () {
   'use strict';
 
   const WORKER_URL = 'https://plain-bush-fa6chatbotfilmfy.gavreliuk54.workers.dev';
-
-  // Telegram (необов'язково — залиш порожнім якщо не налаштовано)
   const TG_TOKEN   = '';
   const TG_CHAT_ID = '';
 
-  // ── UTM ────────────────────────────────────────────────────────────────────
   function getUTM() {
     const p = new URLSearchParams(window.location.search);
     return {
@@ -32,399 +18,344 @@
     if (v) sessionStorage.setItem('sg_utm_'+k, v);
   });
 
-  // ── CSS ────────────────────────────────────────────────────────────────────
   const CSS = `
-    #sg-wrap * { box-sizing: border-box; margin: 0; padding: 0; font-family: Georgia, 'Times New Roman', serif; }
+    #sg-root {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 2147483647;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
 
-    /* Бульбашка */
-    #sg-bubble {
-      position: fixed; bottom: 28px; right: 28px; z-index: 99999;
-      width: 62px; height: 62px; border-radius: 50%;
-      background: #1a3a2a; border: none; cursor: pointer;
+    /* ── Bubble ── */
+    #sg-btn {
+      width: 58px; height: 58px; border-radius: 50%;
+      background: #1c3d2e;
+      border: none; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 4px 20px rgba(0,0,0,.25);
+      box-shadow: 0 4px 16px rgba(0,0,0,.22);
       transition: transform .2s, box-shadow .2s;
+      position: relative;
     }
-    #sg-bubble:hover { transform: scale(1.07); box-shadow: 0 6px 28px rgba(0,0,0,.3); }
-    #sg-bubble svg { width: 28px; height: 28px; color: #fff; }
-    #sg-bubble .sg-notif {
-      position: absolute; top: -3px; right: -3px;
-      width: 20px; height: 20px; background: #c0392b;
-      border-radius: 50%; border: 2px solid #fff;
+    #sg-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.28); }
+    #sg-btn svg { width: 26px; height: 26px; stroke: #fff; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+    #sg-badge {
+      position: absolute; top: -2px; right: -2px;
+      width: 18px; height: 18px; border-radius: 50%;
+      background: #e53e3e; border: 2px solid #fff;
       display: none; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700; color: #fff;
-      font-family: Arial, sans-serif;
+      font-size: 10px; font-weight: 700; color: #fff;
     }
 
-    /* Вікно */
-    #sg-win {
-      position: fixed; bottom: 104px; right: 28px; z-index: 99998;
-      width: 360px; max-width: calc(100vw - 40px);
-      height: 540px; max-height: calc(100vh - 130px);
-      background: #faf9f7;
+    /* ── Window ── */
+    #sg-box {
+      position: absolute; bottom: 70px; right: 0;
+      width: 340px;
+      background: #fff;
       border-radius: 16px;
-      box-shadow: 0 12px 48px rgba(0,0,0,.18);
-      display: flex; flex-direction: column; overflow: hidden;
-      transition: opacity .25s, transform .25s;
+      box-shadow: 0 8px 40px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.08);
+      display: flex; flex-direction: column;
+      overflow: hidden;
+      max-height: calc(100vh - 120px);
+      transition: opacity .2s ease, transform .2s ease;
       transform-origin: bottom right;
     }
-    #sg-win.sg-closed {
-      opacity: 0; transform: scale(.92) translateY(12px); pointer-events: none;
+    #sg-box.hidden {
+      opacity: 0; transform: scale(.95) translateY(8px); pointer-events: none;
     }
 
-    /* Header */
-    #sg-head {
-      background: #1a3a2a;
-      padding: 16px 18px;
-      display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+    /* ── Header ── */
+    #sg-hd {
+      background: #1c3d2e;
+      padding: 14px 16px;
+      display: flex; align-items: center; gap: 10px;
+      flex-shrink: 0;
     }
-    .sg-av {
-      width: 42px; height: 42px; border-radius: 50%;
-      background: rgba(255,255,255,.15);
+    .sg-hav {
+      width: 38px; height: 38px; border-radius: 50%;
+      background: rgba(255,255,255,.18);
       display: flex; align-items: center; justify-content: center;
-      font-size: 20px; flex-shrink: 0;
+      font-size: 16px; font-weight: 700; color: #fff;
+      flex-shrink: 0; letter-spacing: -.5px;
     }
-    .sg-hinfo { flex: 1; }
-    .sg-hname { color: #fff; font-size: 15px; font-weight: 700; letter-spacing: .02em; }
-    .sg-hsub  { color: rgba(255,255,255,.65); font-size: 12px; margin-top: 3px; font-family: Arial, sans-serif; }
-    .sg-dot { display: inline-block; width: 7px; height: 7px; background: #5cb85c; border-radius: 50%; margin-right: 5px; animation: sg-pulse 2s infinite; }
-    @keyframes sg-pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-    #sg-close-btn { background: none; border: none; cursor: pointer; color: rgba(255,255,255,.6); line-height: 1; font-size: 22px; transition: color .15s; padding: 0; font-family: Arial, sans-serif; }
-    #sg-close-btn:hover { color: #fff; }
+    .sg-htxt { flex: 1; min-width: 0; }
+    .sg-hname { color: #fff; font-size: 14px; font-weight: 600; line-height: 1.2; }
+    .sg-hsub { color: rgba(255,255,255,.6); font-size: 11px; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
+    .sg-online { width: 6px; height: 6px; background: #68d391; border-radius: 50%; flex-shrink: 0; }
+    #sg-x {
+      background: none; border: none; cursor: pointer;
+      color: rgba(255,255,255,.5); font-size: 18px; line-height: 1;
+      padding: 2px 4px; transition: color .15s; flex-shrink: 0;
+    }
+    #sg-x:hover { color: #fff; }
 
-    /* Messages */
-    #sg-msgs {
-      flex: 1; overflow-y: auto; padding: 18px 14px;
-      display: flex; flex-direction: column; gap: 12px;
-      background: #f5f3ef;
-      scroll-behavior: smooth;
+    /* ── Messages ── */
+    #sg-log {
+      flex: 1; overflow-y: auto;
+      padding: 14px 12px;
+      display: flex; flex-direction: column; gap: 10px;
+      background: #f7f6f3;
+      min-height: 280px; max-height: 360px;
     }
-    #sg-msgs::-webkit-scrollbar { width: 4px; }
-    #sg-msgs::-webkit-scrollbar-thumb { background: #c8c0b0; border-radius: 2px; }
+    #sg-log::-webkit-scrollbar { width: 3px; }
+    #sg-log::-webkit-scrollbar-thumb { background: #d0c8bc; border-radius: 2px; }
 
-    .sg-row { display: flex; gap: 8px; align-items: flex-end; }
-    .sg-row.sg-u { flex-direction: row-reverse; }
+    .sg-row { display: flex; align-items: flex-end; gap: 7px; }
+    .sg-row.u  { flex-direction: row-reverse; }
 
-    .sg-av-sm {
-      width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0;
-      background: #d9d4cc; display: flex; align-items: center; justify-content: center; font-size: 15px;
+    .sg-ava {
+      width: 26px; height: 26px; border-radius: 50%;
+      background: #1c3d2e; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 11px; font-weight: 700; color: #fff;
     }
 
-    .sg-bbl {
-      max-width: 80%; padding: 11px 15px; border-radius: 16px;
-      font-size: 15px; line-height: 1.6; word-break: break-word;
-      white-space: pre-wrap;
+    .sg-bubble {
+      max-width: 76%;
+      padding: 9px 13px;
+      font-size: 14px; line-height: 1.55;
+      word-break: break-word; white-space: pre-wrap;
+      border-radius: 14px;
     }
-    .sg-row.sg-b .sg-bbl {
-      background: #fff; color: #2c2416;
-      border-bottom-left-radius: 4px;
-      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+    .sg-row.b .sg-bubble {
+      background: #fff; color: #1a1a1a;
+      border-bottom-left-radius: 3px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
     }
-    .sg-row.sg-u .sg-bbl {
-      background: #1a3a2a; color: #fff;
-      border-bottom-right-radius: 4px;
+    .sg-row.u .sg-bubble {
+      background: #1c3d2e; color: #fff;
+      border-bottom-right-radius: 3px;
     }
 
     /* Typing */
-    .sg-typing .sg-bbl { padding: 13px 16px; }
+    .sg-typing .sg-bubble { padding: 11px 14px; }
     .sg-dots span {
-      display: inline-block; width: 7px; height: 7px;
-      background: #a09580; border-radius: 50%; margin: 0 2px;
-      animation: sg-bounce 1.3s infinite;
+      display: inline-block; width: 6px; height: 6px;
+      background: #b0a898; border-radius: 50%; margin: 0 2px;
+      animation: sg-b 1.2s infinite;
     }
     .sg-dots span:nth-child(2) { animation-delay: .2s; }
     .sg-dots span:nth-child(3) { animation-delay: .4s; }
-    @keyframes sg-bounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-6px)} }
+    @keyframes sg-b { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
 
-    /* Time */
-    .sg-time { font-size: 11px; color: #b0a898; text-align: center; margin: 4px 0; font-family: Arial, sans-serif; }
+    .sg-ts { text-align: center; font-size: 11px; color: #b8b0a4; margin: 2px 0; }
 
-    /* Footer */
-    #sg-foot {
-      padding: 12px 14px; border-top: 1px solid #e8e2d8;
-      background: #fff; display: flex; gap: 8px; flex-shrink: 0;
+    /* ── Footer ── */
+    #sg-ft {
+      display: flex; gap: 8px; padding: 10px 12px;
+      border-top: 1px solid #ede8e0;
+      background: #fff; flex-shrink: 0;
+      align-items: flex-end;
     }
-    #sg-inp {
-      flex: 1; border: 1.5px solid #d8d0c4; border-radius: 10px;
-      padding: 10px 14px; font-size: 15px; outline: none;
-      resize: none; line-height: 1.45; max-height: 90px;
-      font-family: Georgia, serif; color: #2c2416;
-      background: #faf9f7; transition: border-color .15s;
+    #sg-ta {
+      flex: 1; border: 1.5px solid #ddd7ce; border-radius: 10px;
+      padding: 9px 12px; font-size: 14px; line-height: 1.4;
+      resize: none; outline: none; max-height: 80px;
+      font-family: inherit; color: #1a1a1a;
+      background: #faf8f5; transition: border-color .15s;
     }
-    #sg-inp:focus { border-color: #1a3a2a; background: #fff; }
-    #sg-inp::placeholder { color: #b0a898; font-style: italic; }
-    #sg-send {
-      width: 42px; height: 42px; border-radius: 10px; flex-shrink: 0;
-      background: #1a3a2a; color: #fff; border: none; cursor: pointer;
+    #sg-ta:focus { border-color: #1c3d2e; background: #fff; }
+    #sg-ta::placeholder { color: #b8b0a4; }
+    #sg-go {
+      width: 38px; height: 38px; border-radius: 10px;
+      background: #1c3d2e; border: none; cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      align-self: flex-end; transition: background .15s;
+      flex-shrink: 0; transition: background .15s; padding: 0;
     }
-    #sg-send:hover { background: #0f2518; }
-    #sg-send:disabled { background: #b0a898; cursor: not-allowed; }
-    #sg-send svg { width: 18px; height: 18px; }
+    #sg-go:hover { background: #142d21; }
+    #sg-go:disabled { background: #c5bdb4; cursor: not-allowed; }
+    #sg-go svg { width: 17px; height: 17px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
-    /* Powered by */
-    #sg-powered {
-      text-align: center; padding: 6px; font-size: 11px;
-      color: #b0a898; background: #fff; border-top: 1px solid #f0ebe2;
-      font-family: Arial, sans-serif; flex-shrink: 0;
+    #sg-pw {
+      text-align: center; font-size: 10px; color: #c5bdb4;
+      padding: 5px; background: #fff; flex-shrink: 0;
+      border-top: 1px solid #f0ebe2; letter-spacing: .02em;
     }
 
-    @media (max-width: 420px) {
-      #sg-win { right: 8px; left: 8px; width: auto; bottom: 90px; }
-      #sg-bubble { right: 16px; bottom: 16px; }
+    @media (max-width: 400px) {
+      #sg-root { bottom: 16px; right: 16px; }
+      #sg-box  { width: calc(100vw - 32px); right: 0; }
     }
   `;
 
-  // ── Стан ───────────────────────────────────────────────────────────────────
-  let isOpen   = false;
-  let history  = [];
-  let typing   = false;
-  let leadSent = false;
-  let session  = { name: null, contact: null, price: null };
+  let open = false, busy = false, started = false, leadSent = false;
+  let hist = [], ses = { name: null, contact: null, price: null };
 
-  // ── Будуємо UI ─────────────────────────────────────────────────────────────
-  function build() {
-    const style = document.createElement('style');
-    style.textContent = CSS;
-    document.head.appendChild(style);
+  function inject() {
+    const s = document.createElement('style');
+    s.textContent = CSS;
+    document.head.appendChild(s);
 
-    const wrap = document.createElement('div');
-    wrap.id = 'sg-wrap';
-
-    // Бульбашка
-    wrap.innerHTML += `
-      <button id="sg-bubble" aria-label="Otwórz czat z doradcą">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-        </svg>
-        <span class="sg-notif" id="sg-notif">1</span>
-      </button>
-
-      <div id="sg-win" class="sg-closed" role="dialog" aria-label="Czat z doradcą">
-        <div id="sg-head">
-          <div class="sg-av">🪴</div>
-          <div class="sg-hinfo">
+    const r = document.createElement('div');
+    r.id = 'sg-root';
+    r.innerHTML = `
+      <div id="sg-box" class="hidden">
+        <div id="sg-hd">
+          <div class="sg-hav">M</div>
+          <div class="sg-htxt">
             <div class="sg-hname">Marta — Doradca</div>
-            <div class="sg-hsub"><span class="sg-dot"></span>Elastyczne-szklo.com</div>
+            <div class="sg-hsub"><span class="sg-online"></span>elastyczne-szklo.com</div>
           </div>
-          <button id="sg-close-btn" aria-label="Zamknij">✕</button>
+          <button id="sg-x" aria-label="Zamknij">✕</button>
         </div>
-        <div id="sg-msgs" role="log" aria-live="polite"></div>
-        <div id="sg-foot">
-          <textarea id="sg-inp" rows="1" placeholder="Napisz wiadomość…" aria-label="Wiadomość"></textarea>
-          <button id="sg-send" aria-label="Wyślij">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/>
-            </svg>
+        <div id="sg-log" role="log" aria-live="polite"></div>
+        <div id="sg-ft">
+          <textarea id="sg-ta" rows="1" placeholder="Napisz wiadomość…"></textarea>
+          <button id="sg-go" aria-label="Wyślij">
+            <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
-        <div id="sg-powered">elastyczne-szklo.com</div>
+        <div id="sg-pw">elastyczne-szklo.com</div>
       </div>
+      <button id="sg-btn" aria-label="Otwórz czat">
+        <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        <span id="sg-badge"></span>
+      </button>
     `;
-
-    document.body.appendChild(wrap);
+    document.body.appendChild(r);
   }
 
-  // ── Утиліти ────────────────────────────────────────────────────────────────
-  const $ = id => document.getElementById(id);
+  const el = id => document.getElementById(id);
 
-  function scrollDown() {
-    const m = $('sg-msgs');
-    m.scrollTop = m.scrollHeight;
-  }
+  function scroll() { const l = el('sg-log'); l.scrollTop = l.scrollHeight; }
 
-  function nowTime() {
-    return new Date().toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' });
-  }
-
-  function addTime() {
+  function time() {
+    const d = new Date();
     const t = document.createElement('div');
-    t.className = 'sg-time';
-    t.textContent = nowTime();
-    $('sg-msgs').appendChild(t);
+    t.className = 'sg-ts';
+    t.textContent = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+    el('sg-log').appendChild(t);
   }
 
-  function addBotMsg(text) {
-    $('sg-msgs').querySelector('.sg-typing')?.remove();
+  function addBot(text) {
+    el('sg-log').querySelector('.sg-typing')?.remove();
     const row = document.createElement('div');
-    row.className = 'sg-row sg-b';
-    row.innerHTML = `
-      <div class="sg-av-sm">🪴</div>
-      <div class="sg-bbl">${text.replace(/\n/g, '<br>')}</div>
-    `;
-    $('sg-msgs').appendChild(row);
-    scrollDown();
+    row.className = 'sg-row b';
+    row.innerHTML = `<div class="sg-ava">M</div><div class="sg-bubble">${text.replace(/\n/g,'<br>')}</div>`;
+    el('sg-log').appendChild(row);
+    scroll();
   }
 
-  function addUserMsg(text) {
+  function addUser(text) {
     const row = document.createElement('div');
-    row.className = 'sg-row sg-u';
-    row.innerHTML = `<div class="sg-bbl">${text.replace(/</g,'&lt;')}</div>`;
-    $('sg-msgs').appendChild(row);
-    scrollDown();
+    row.className = 'sg-row u';
+    row.innerHTML = `<div class="sg-bubble">${text.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div>`;
+    el('sg-log').appendChild(row);
+    scroll();
   }
 
-  function showTyping() {
+  function typing() {
     const row = document.createElement('div');
-    row.className = 'sg-row sg-b sg-typing';
-    row.innerHTML = `
-      <div class="sg-av-sm">🪴</div>
-      <div class="sg-bbl"><span class="sg-dots"><span></span><span></span><span></span></span></div>
-    `;
-    $('sg-msgs').appendChild(row);
-    scrollDown();
+    row.className = 'sg-row b sg-typing';
+    row.innerHTML = `<div class="sg-ava">M</div><div class="sg-bubble"><span class="sg-dots"><span></span><span></span><span></span></span></div>`;
+    el('sg-log').appendChild(row);
+    scroll();
   }
 
-  function setDisabled(v) {
-    $('sg-inp').disabled  = v;
-    $('sg-send').disabled = v;
-  }
+  function lock(v) { el('sg-ta').disabled = v; el('sg-go').disabled = v; }
 
-  // ── Відкрити / закрити ─────────────────────────────────────────────────────
   async function openChat() {
-    isOpen = true;
-    $('sg-win').classList.remove('sg-closed');
-    $('sg-notif').style.display = 'none';
-    if (!history.length) {
-      showTyping();
-      await new Promise(r => setTimeout(r, 700));
-      $('sg-msgs').querySelector('.sg-typing')?.remove();
-      addBotMsg('Dzień dobry! 😊 Jestem Marta — doradca w elastyczne-szklo.com.\n\nCzy chce Pan/Pani dobrać szkło ochronne do stołu, czy ma pytanie o produkt?');
-      addTime();
+    open = true;
+    el('sg-box').classList.remove('hidden');
+    el('sg-badge').style.display = 'none';
+    if (!started) {
+      started = true;
+      typing();
+      await new Promise(r => setTimeout(r, 600));
+      el('sg-log').querySelector('.sg-typing')?.remove();
+      addBot('Dzień dobry!\n\nJestem Marta — doradca w elastyczne-szklo.com. Pomogę dobrać odpowiednie szkło do Pana/Pani stołu.\n\nCzy chce Pan/Pani złożyć zamówienie, czy ma pytanie o produkt?');
+      time();
     }
-    $('sg-inp').focus();
+    el('sg-ta').focus();
   }
 
-  function closeChat() {
-    isOpen = false;
-    $('sg-win').classList.add('sg-closed');
-  }
+  function closeChat() { open = false; el('sg-box').classList.add('hidden'); }
 
-  // ── Витягуємо дані ─────────────────────────────────────────────────────────
-  function extractContact(text) {
-    const phone = text.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);
-    if (phone) return phone[0].replace(/[\s-]/g,'');
-    const email = text.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-    return email ? email[0] : null;
+  function getPhone(t) {
+    const m = t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);
+    return m ? m[0].replace(/[\s-]/g,'') : null;
   }
-  function extractName(text) {
-    const m = text.match(/[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+/);
+  function getEmail(t) { const m = t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/); return m ? m[0] : null; }
+  function getName(t) {
+    const m = t.match(/[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+/);
     if (m) return m[0];
-    const m2 = text.match(/(?:jestem|nazywam się|mam na imię)\s+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)/i);
+    const m2 = t.match(/(?:jestem|nazywam się)\s+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)/i);
     return m2 ? m2[1] : null;
   }
-  function extractPrice(text) {
-    const m = text.match(/(\d+)\s*zł/);
-    return m ? m[1] : null;
-  }
+  function getPrice(t) { const m = t.match(/(\d+)\s*zł/); return m ? m[1] : null; }
 
-  // ── Telegram ───────────────────────────────────────────────────────────────
-  async function tgSend(text) {
+  async function tg(txt) {
     if (!TG_TOKEN || !TG_CHAT_ID) return;
     fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: TG_CHAT_ID, text, parse_mode: 'HTML' }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chat_id: TG_CHAT_ID, text: txt, parse_mode: 'HTML' }),
     }).catch(() => {});
   }
 
-  // ── Відправка повідомлення ─────────────────────────────────────────────────
   async function send() {
-    const inp  = $('sg-inp');
-    const text = inp.value.trim();
-    if (!text || typing) return;
+    const ta   = el('sg-ta');
+    const text = ta.value.trim();
+    if (!text || busy) return;
+    ta.value = ''; ta.style.height = 'auto';
+    busy = true; lock(true);
+    addUser(text); typing();
 
-    inp.value = ''; inp.style.height = 'auto';
-    typing = true;
-    setDisabled(true);
-    addUserMsg(text);
-    showTyping();
+    const contact = getPhone(text) || getEmail(text);
+    const name    = getName(text);
+    if (contact && !ses.contact) ses.contact = contact;
+    if (name    && !ses.name)    ses.name    = name;
 
-    // Дані з повідомлення клієнта
-    const contact = extractContact(text);
-    const name    = extractName(text);
-    if (contact && !session.contact) session.contact = contact;
-    if (name    && !session.name)    session.name    = name;
-
-    history.push({ role: 'user', content: text });
+    hist.push({ role: 'user', content: text });
 
     try {
-      const res  = await fetch(WORKER_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: history }),
+      const res   = await fetch(WORKER_URL, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: hist }),
       });
       const data  = await res.json();
       const reply = data.content?.[0]?.text || 'Przepraszamy, spróbuj ponownie.';
+      hist.push({ role: 'assistant', content: reply });
+      const price = getPrice(reply);
+      if (price) ses.price = price;
+      addBot(reply); time();
 
-      history.push({ role: 'assistant', content: reply });
-
-      const price = extractPrice(reply);
-      if (price) session.price = price;
-
-      addBotMsg(reply);
-      addTime();
-
-      // Telegram — відправляємо ліда при першому контакті
-      if (session.contact && !leadSent) {
+      if (ses.contact && !leadSent) {
         leadSent = true;
         const utm = getUTM();
-        const utmStr = [utm.source, utm.medium, utm.campaign].filter(Boolean).join(' / ') || 'прямий';
-        const conv = history.slice(-8).map(m => `${m.role === 'user' ? '👤' : '🤖'} ${m.content.slice(0, 150)}`).join('\n');
-        tgSend(
-          `🔥 <b>Новий лід — Elastyczne Szkło</b>\n\n` +
-          `👤 ${session.name || '—'}\n📞 ${session.contact}\n💰 ${session.price || '—'} zł\n📣 UTM: ${utmStr}\n\n📝 Розмова:\n${conv}`
-        );
+        const u = [utm.source, utm.medium, utm.campaign].filter(Boolean).join(' / ') || 'прямий';
+        const c = hist.slice(-8).map(m => `${m.role==='user'?'👤':'🤖'} ${m.content.slice(0,120)}`).join('\n');
+        tg(`🔥 <b>Новий лід — Elastyczne Szkło</b>\n\n👤 ${ses.name||'—'}\n📞 ${ses.contact}\n💰 ${ses.price||'—'} zł\n📣 ${u}\n\n📝 Розмова:\n${c}`);
       }
-
-    } catch (e) {
-      $('sg-msgs').querySelector('.sg-typing')?.remove();
-      addBotMsg('Przepraszamy, brak połączenia. Proszę odświeżyć stronę.');
+    } catch {
+      el('sg-log').querySelector('.sg-typing')?.remove();
+      addBot('Brak połączenia. Proszę odświeżyć stronę.');
     } finally {
-      typing = false;
-      setDisabled(false);
-      $('sg-inp').focus();
+      busy = false; lock(false); el('sg-ta').focus();
     }
   }
 
-  // ── Авто-відкриття ─────────────────────────────────────────────────────────
-  function scheduleAutoOpen() {
-    if (sessionStorage.getItem('sg_opened')) return;
-    setTimeout(() => {
-      if (!isOpen) $('sg-notif').style.display = 'flex';
-    }, 8000);
-    setTimeout(() => {
-      if (!isOpen) {
-        sessionStorage.setItem('sg_opened', '1');
-        openChat();
-      }
-    }, 20000);
+  function autoOpen() {
+    if (sessionStorage.getItem('sg_v')) return;
+    setTimeout(() => { if (!open) { el('sg-badge').style.display = 'flex'; } }, 10000);
+    setTimeout(() => { if (!open) { sessionStorage.setItem('sg_v','1'); openChat(); } }, 25000);
   }
 
-  // ── Ініціалізація ──────────────────────────────────────────────────────────
   function init() {
-    build();
-
-    $('sg-bubble').addEventListener('click', () => isOpen ? closeChat() : openChat());
-    $('sg-close-btn').addEventListener('click', closeChat);
-    $('sg-send').addEventListener('click', send);
-
-    const inp = $('sg-inp');
-    inp.addEventListener('keydown', e => {
+    inject();
+    el('sg-btn').addEventListener('click', () => open ? closeChat() : openChat());
+    el('sg-x').addEventListener('click', closeChat);
+    el('sg-go').addEventListener('click', send);
+    el('sg-ta').addEventListener('keydown', e => {
       if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
     });
-    inp.addEventListener('input', function () {
+    el('sg-ta').addEventListener('input', function() {
       this.style.height = 'auto';
-      this.style.height = Math.min(this.scrollHeight, 90) + 'px';
+      this.style.height = Math.min(this.scrollHeight, 80) + 'px';
     });
-
-    scheduleAutoOpen();
+    autoOpen();
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
+  document.readyState === 'loading'
+    ? document.addEventListener('DOMContentLoaded', init)
+    : init();
 })();
