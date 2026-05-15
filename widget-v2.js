@@ -229,26 +229,46 @@
     return m ? m[0] : null;
   }
   function getName(t) {
-    const m = t.match(/[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+/);
-    if (m) return m[0];
-    const m2 = t.match(/(?:jestem|nazywam się)\s+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)/i);
-    return m2 ? m2[1] : null;
+    // Ім'я + прізвище
+    const m1 = t.match(/[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{1,}\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{1,}/);
+    if (m1) return m1[0];
+    // Після "jestem/nazywam się/imię:"
+    const m2 = t.match(/(?:jestem|nazywam się|imię[:\s]+)\s*([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,})/i);
+    if (m2) return m2[1];
+    // Одне слово з великої літери (якщо вже є контакт)
+    const m3 = t.match(/^([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})$/m);
+    if (m3) return m3[1];
+    return null;
+  }
+  function getNameFromBotReply(botText) {
+    // Бот каже "Dziękuję Pavlo!" або "Dziękuję, Pavlo"
+    const m = botText.match(/Dziękuję[,!\s]+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})/);
+    return m ? m[1] : null;
   }
   function getPrice(t) {
-    const m = t.match(/(\d+)\s*zł/); return m ? m[1] : null;
+    // Остання ціна в тексті (найбільш конкретна)
+    const all = [...t.matchAll(/(\d+)\s*zł/g)];
+    return all.length ? all[all.length-1][1] : null;
   }
-  function getProduct(t) {
-    const m = t.match(/(\d+)\s*[xX×]\s*(\d+)\s*cm/);
-    return m ? `${m[1]}×${m[2]} cm` : null;
+  function getProduct(userText, botText) {
+    // Розміри з будь-якого тексту
+    const combined = userText + ' ' + botText;
+    const m = combined.match(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/);
+    if (m) return `${m[1]}×${m[2]} cm`;
+    // Тип скла з відповіді бота
+    const type = botText.match(/[Bb]łyszczące\s*(1\.5|2)mm|[Mm]atowe\s*1\.5mm|[Ww]yprzedaż/);
+    return type ? type[0] : null;
   }
   function getAddress(t) {
-    // Польський поштовий індекс
     if (/\d{2}-\d{3}/.test(t)) return t.trim();
-    // вулиця з номером
     if (/ul\.|ulica|al\.|aleja/i.test(t)) return t.trim();
-    // місто + номер будинку
-    if (/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|bydgoszcz|toruń|olsztyn)\b/i.test(t)) return t.trim();
+    if (/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|bydgoszcz|toruń|olsztyn|gdynia|częstochowa|radom|sosnowiec|kielce|gliwice|zabrze|bytom|bielsko)\b/i.test(t)) return t.trim();
     return null;
+  }
+  function buildSummary() {
+    // Останні 3 повідомлення клієнта
+    const userMsgs = hist.filter(m => m.role === 'user').slice(-3);
+    return userMsgs.map(m => m.content.slice(0, 80)).join(' | ');
   }
 
   // ── Telegram ────────────────────────────────────────────────────────────────
@@ -270,7 +290,8 @@
       `📦 <b>Товар:</b> ${ses.product || 'уточнюється'}\n` +
       `💰 <b>Сума:</b> ${ses.price || '—'} zł\n` +
       `🏠 <b>Адреса:</b> ${ses.address || 'не вказано'}\n` +
-      `📣 <b>UTM:</b> ${u}`
+      `📣 <b>UTM:</b> ${u}\n\n` +
+      `💬 <b>Резюме:</b> ${buildSummary()}`
     );
   }
 
@@ -301,10 +322,12 @@
       const reply = data.content?.[0]?.text || 'Przepraszamy, spróbuj ponownie.';
       hist.push({ role: 'assistant', content: reply });
 
-      const price   = getPrice(reply);
-      const product = getProduct(reply);
-      if (price)               ses.price   = price;
-      if (product && !ses.product) ses.product = product;
+      const price      = getPrice(reply);
+      const product    = getProduct(text, reply);
+      const nameInBot  = getNameFromBotReply(reply);
+      if (price)                    ses.price   = price;
+      if (product && !ses.product)  ses.product = product;
+      if (nameInBot && !ses.name)   ses.name    = nameInBot;
 
       addBot(reply); addTime();
 
