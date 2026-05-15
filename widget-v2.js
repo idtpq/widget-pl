@@ -2,8 +2,7 @@
   'use strict';
 
   const WORKER_URL = 'https://plain-bush-fa6chatbotfilmfy.gavreliuk54.workers.dev';
-  const TG_TOKEN   = '8886047868:AAFTroHo_5YYGes8VoXhL-yYNuotZWvfdwQ';
-  const TG_CHAT_ID = '-1003841108694';
+  // Telegram тепер у Cloudflare Worker — ключі не видно в браузері
 
   function getUTM() {
     const p = new URLSearchParams(window.location.search);
@@ -272,36 +271,30 @@
   }
 
   // ── Telegram ────────────────────────────────────────────────────────────────
-  async function tg(txt) {
-    if (!TG_TOKEN || TG_TOKEN.includes('ВСТАВИТИ')) {
-      console.warn('[SG] TG_TOKEN не встановлено');
-      return;
-    }
+  async function sendLead() {
+    const utm = getUTM();
     try {
-      const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+      const r = await fetch(WORKER_URL + '/lead', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: TG_CHAT_ID, text: txt, parse_mode: 'HTML' }),
+        body: JSON.stringify({
+          name:         ses.name    || '',
+          contact:      ses.contact || '',
+          product:      ses.product || '',
+          price:        ses.price   || '',
+          address:      ses.address || '',
+          summary:      buildSummary(),
+          utm_source:   utm.source,
+          utm_medium:   utm.medium,
+          utm_campaign: utm.campaign,
+        }),
       });
       const d = await r.json();
-      if (!d.ok) console.error('[SG] Telegram error:', d.description);
-      else console.log('[SG] Telegram: повідомлення відправлено');
-    } catch(e) { console.error('[SG] Telegram fetch error:', e); }
+      if (d.ok) console.log('[SG] Лід відправлено в Telegram');
+      else console.error('[SG] Telegram error:', d.error);
+    } catch(e) { console.error('[SG] Lead send error:', e); }
   }
 
-  function buildLeadMsg() {
-    const utm = getUTM();
-    const u = [utm.source, utm.medium, utm.campaign].filter(Boolean).join(' / ') || 'прямий';
-    return (
-      `🔥 <b>Новий лід — Elastyczne Szkło</b>\n\n` +
-      `👤 <b>Ім'я:</b> ${ses.name || 'не вказано'}\n` +
-      `📞 <b>Контакт:</b> ${ses.contact}\n` +
-      `📦 <b>Товар:</b> ${ses.product || 'уточнюється'}\n` +
-      `💰 <b>Сума:</b> ${ses.price || '—'} zł\n` +
-      `🏠 <b>Адреса:</b> ${ses.address || 'не вказано'}\n` +
-      `📣 <b>UTM:</b> ${u}\n\n` +
-      `💬 <b>Резюме:</b> ${buildSummary()}`
-    );
-  }
+
 
   // ── Відправка повідомлення ──────────────────────────────────────────────────
   async function send() {
@@ -342,12 +335,12 @@
       // Перший лід — є контакт
       if (ses.contact && !leadSent) {
         leadSent = true;
-        tg(buildLeadMsg());
+        sendLead();
       }
-      // Оновлення — з'явилась адреса
+      // Оновлення — з'явилась адреса після першого ліда
       if (ses.address && leadSent && !ses.addressSent) {
         ses.addressSent = true;
-        tg(buildLeadMsg());
+        sendLead();
       }
 
     } catch {
