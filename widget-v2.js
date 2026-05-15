@@ -2,8 +2,8 @@
   'use strict';
 
   const WORKER_URL = 'https://plain-bush-fa6chatbotfilmfy.gavreliuk54.workers.dev';
-  const TG_TOKEN   = 'ВСТАВИТИ_ТОКЕН';
-  const TG_CHAT_ID = 'ВСТАВИТИ_CHAT_ID';
+  const TG_TOKEN   = '8886047868:AAFTroHo_5YYGes8VoXhL-yYNuotZWvfdwQ';
+  const TG_CHAT_ID = '-1003841108694';
 
   function getUTM() {
     const p = new URLSearchParams(window.location.search);
@@ -273,11 +273,19 @@
 
   // ── Telegram ────────────────────────────────────────────────────────────────
   async function tg(txt) {
-    if (!TG_TOKEN || TG_TOKEN === 'ВСТАВИТИ_ТОКЕН') return;
-    fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: TG_CHAT_ID, text: txt, parse_mode: 'HTML' }),
-    }).catch(() => {});
+    if (!TG_TOKEN || TG_TOKEN.includes('ВСТАВИТИ')) {
+      console.warn('[SG] TG_TOKEN не встановлено');
+      return;
+    }
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${TG_TOKEN}/sendMessage`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ chat_id: TG_CHAT_ID, text: txt, parse_mode: 'HTML' }),
+      });
+      const d = await r.json();
+      if (!d.ok) console.error('[SG] Telegram error:', d.description);
+      else console.log('[SG] Telegram: повідомлення відправлено');
+    } catch(e) { console.error('[SG] Telegram fetch error:', e); }
   }
 
   function buildLeadMsg() {
