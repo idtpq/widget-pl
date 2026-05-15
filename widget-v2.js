@@ -2,8 +2,8 @@
   'use strict';
 
   const WORKER_URL = 'https://plain-bush-fa6chatbotfilmfy.gavreliuk54.workers.dev';
-  const TG_TOKEN   = '';
-  const TG_CHAT_ID = '';
+  const TG_TOKEN   = '8886047868:AAFTroHo_5YYGes8VoXhL-yYNuotZWvfdwQ';
+  const TG_CHAT_ID = '-1003841108694';
 
   function getUTM() {
     const p = new URLSearchParams(window.location.search);
