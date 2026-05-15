@@ -332,14 +332,16 @@
 
       addBot(reply); addTime();
 
-      // Перший лід — є контакт
+      // Відправляємо лід з затримкою — щоб встигла прийти адреса
       if (ses.contact && !leadSent) {
         leadSent = true;
-        sendLead();
+        // Чекаємо 12 сек — якщо за цей час прийде адреса, відправимо разом
+        setTimeout(() => { sendLead(); }, 12000);
       }
-      // Оновлення — з'явилась адреса після першого ліда
-      if (ses.address && leadSent && !ses.addressSent) {
+      // Якщо адреса прийшла після відправки — оновлюємо
+      if (ses.address && !ses.addressSent && leadSent) {
         ses.addressSent = true;
+        clearTimeout(ses._leadTimer);
         sendLead();
       }
 
