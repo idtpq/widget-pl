@@ -250,18 +250,29 @@
     return all.length ? all[all.length-1][1] : null;
   }
   function getProduct(userText, botText) {
-    // Розміри з будь-якого тексту
-    const combined = userText + ' ' + botText;
-    const m = combined.match(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/);
-    if (m) return `${m[1]}×${m[2]} cm`;
-    // Тип скла з відповіді бота
-    const type = botText.match(/[Bb]łyszczące\s*(1\.5|2)mm|[Mm]atowe\s*1\.5mm|[Ww]yprzedaż/);
+    // Збираємо ВСІ розміри з усієї розмови
+    const allText = hist.map(m => m.content).join(' ');
+    const matches = [...allText.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
+    const dims = [...new Set(matches.map(m => `${m[1]}×${m[2]} cm`))];
+    if (dims.length) return dims.join(', ');
+    const type = botText.match(/[Bb]łyszczące\s*(1\.5|2)mm|[Mm]atowe\s*1\.5mm/);
     return type ? type[0] : null;
   }
   function getAddress(t) {
-    if (/\d{2}-\d{3}/.test(t)) return t.trim();
-    if (/ul\.|ulica|al\.|aleja/i.test(t)) return t.trim();
-    if (/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|bydgoszcz|toruń|olsztyn|gdynia|częstochowa|radom|sosnowiec|kielce|gliwice|zabrze|bytom|bielsko)\b/i.test(t)) return t.trim();
+    // Витягуємо тільки адресну частину — без email та телефону
+    let clean = t
+      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '')
+      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g, '')
+      .replace(/\s+/g, ' ').trim();
+
+    // Поштовий індекс — сильний сигнал
+    if (/\d{2}-\d{3}/.test(clean)) {
+      // Беремо частину від вулиці або міста до кінця
+      const m = clean.match(/([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ][\w\s.,\/\-]+\d{2}-\d{3}[\w\s]*)/);
+      return m ? m[0].trim() : clean;
+    }
+    if (/ul\.|ulica|al\.|aleja/i.test(clean)) return clean;
+    if (/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|bydgoszcz|toruń|olsztyn|gdynia|częstochowa|radom|sosnowiec|kielce|gliwice|zabrze|bytom|bielsko)\b/i.test(clean)) return clean;
     return null;
   }
   function buildSummary() {
@@ -273,6 +284,9 @@
   // ── Telegram ────────────────────────────────────────────────────────────────
   async function sendLead() {
     const utm = getUTM();
+    const priceNum = parseFloat(ses.price) || 0;
+    const delivery = priceNum >= 500 ? 'gratis' : '18';
+    const total    = priceNum >= 500 ? priceNum : priceNum + 18;
     try {
       const r = await fetch(WORKER_URL + '/lead', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -281,6 +295,8 @@
           contact:      ses.contact || '',
           product:      ses.product || '',
           price:        ses.price   || '',
+          delivery:     delivery,
+          total:        total ? String(total) : '',
           address:      ses.address || '',
           summary:      buildSummary(),
           utm_source:   utm.source,
