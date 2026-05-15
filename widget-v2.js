@@ -250,13 +250,18 @@
     return all.length ? all[all.length-1][1] : null;
   }
   function getProduct(userText, botText) {
-    // Збираємо ВСІ розміри з усієї розмови
     const allText = hist.map(m => m.content).join(' ');
-    const matches = [...allText.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
-    const dims = [...new Set(matches.map(m => `${m[1]}×${m[2]} cm`))];
-    if (dims.length) return dims.join(', ');
-    const type = botText.match(/[Bb]łyszczące\s*(1\.5|2)mm|[Mm]atowe\s*1\.5mm/);
-    return type ? type[0] : null;
+    // Розміри
+    const dimMatches = [...allText.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
+    const dims = [...new Set(dimMatches.map(m => `${m[1]}×${m[2]} cm`))];
+    // Товщина
+    const thickMatch = allText.match(/[Bb]łyszczące\s*(1\.5|2)mm|[Mm]atowe\s*1\.5mm|[Ww]yprzedaż/);
+    const thick = thickMatch ? thickMatch[0].replace(/[Bb]łyszczące/,'Błyszczące').replace(/[Mm]atowe/,'Matowe') : '';
+    // Коло
+    const circleMatch = allText.match(/śr(?:ednica)?[\.:\s]*(\d{2,3})\s*cm|okrąg[\s:]+?(\d{2,3})|kolo[\s:]+?(\d{2,3})/i);
+    const circle = circleMatch ? `okrąg ⌀${circleMatch[1]||circleMatch[2]||circleMatch[3]} cm` : '';
+    const parts = [thick, ...dims, circle].filter(Boolean);
+    return parts.length ? parts.join(', ') : null;
   }
   function getAddress(t) {
     // Витягуємо тільки адресну частину — без email та телефону
@@ -299,6 +304,7 @@
           total:        total ? String(total) : '',
           address:      ses.address || '',
           summary:      buildSummary(),
+          full_chat:    hist.map(m => (m.role==='user'?'👤 ':'🤖 ') + m.content).join('\n---\n'),
           utm_source:   utm.source,
           utm_medium:   utm.medium,
           utm_campaign: utm.campaign,
