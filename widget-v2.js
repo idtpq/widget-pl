@@ -324,7 +324,7 @@
         const utm = getUTM();
         const u = [utm.source, utm.medium, utm.campaign].filter(Boolean).join(' / ') || 'прямий';
         const c = hist.slice(-8).map(m => `${m.role==='user'?'👤':'🤖'} ${m.content.slice(0,120)}`).join('\n');
-        tg(`🔥 <b>Новий лід — Elastyczne Szkło</b>\n\n👤 ${ses.name||'—'}\n📞 ${ses.contact}\n💰 ${ses.price||'—'} zł\n📣 ${u}\n\n📝 Розмова:\n${c}`);
+        tg(`🔥 <b>Новий лід — Elastyczne Szkło</b>\n\n👤 <b>Ім'я:</b> ${ses.name||'не вказано'}\n📞 <b>Контакт:</b> ${ses.contact}\n💰 <b>Сума:</b> ${ses.price||'—'} zł\n📣 <b>UTM:</b> ${u}\n\n🛍 <b>Замовлення:</b> ${ses.product||'уточнюється'}`);
       }
     } catch {
       el('sg-log').querySelector('.sg-typing')?.remove();
