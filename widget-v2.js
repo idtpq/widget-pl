@@ -239,15 +239,25 @@
   function getPhone(t){const m=t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);return m?m[0].replace(/[\s-]/g,''):null;}
   function getEmail(t){const m=t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:null;}
   function getName(t){
-    const m=t.match(/[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+/);if(m)return m[0];
-    const m2=t.match(/(?:jestem|nazywam się)\s+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)/i);return m2?m2[1]:null;
+    // Ім'я Прізвище (будь-який регістр)
+    const m=t.match(/[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,}\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,}/);
+    if(m&&!m[0].includes('@'))return m[0];
+    const m2=t.match(/(?:jestem|nazywam się)\s+([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+)/i);
+    return m2?m2[1]:null;
   }
   function getPrice(t){const all=[...t.matchAll(/(\d+)\s*zł/g)];return all.length?all[all.length-1][1]:null;}
   function getProduct(botText){
-    const list=[...botText.matchAll(/[-–]\s*([Bb]\u0142yszcz\u0105ce\s*[0-9.]+mm|[Rr]yflowane\s*[0-9.]+mm|[Ww]yprzeda\u017c)[^\n]*/g)];
+    // Спочатку шукаємо в підтверджуючому повідомленні
+    const list=[...botText.matchAll(/[-–]\s*((?:[Bb]\u0142yszcz\u0105ce|[Rr]yflowane|[Ww]yprzeda\u017c)[^\n]*)/g)];
     let product=null;
-    if(list.length>0){product=list.map(m=>m[0].replace(/^[-–]\s*/,'').trim()).join(' | ');}
-    else{
+    if(list.length>0){
+      product=list.map(m=>m[0].replace(/^[-–]\s*/,'').trim()).join(' | ');
+      // Якщо в продукті немає розмірів — додаємо з історії
+      if(!/\d{2,3}/.test(product)){
+        const allDims=getAllDims();
+        if(allDims)product=product+', '+allDims;
+      }
+    } else{
       const all=hist.map(m=>m.content).join(' ');
       const allDims=[...all.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
       const dims=[...new Set(allDims.map(m=>{
@@ -265,15 +275,35 @@
   }
 
   function getAddress(t){
-    let c=t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'').replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'').replace(/\s+/g,' ').trim();
+    // Видаляємо email, телефон, імʼя — решта = адреса
+    let c=t
+      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'')
+      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'')
+      .replace(/^[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,}\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,}/,'') // прибираємо ім'я
+      .replace(/[,;]+/g,',').replace(/\s+/g,' ').trim()
+      .replace(/^[,\s]+|[,\s]+$/g,'').trim();
+    if(!c||c.length<5)return null;
+    // Якщо є цифра + текст — скоріш за все адреса
+    if(/\d/.test(c)&&c.length>5)return c;
+    // Польський індекс
     if(/\d{2}-\d{3}/.test(c))return c;
     if(/ul\.|ulica|al\.|aleja/i.test(c))return c;
+    // Будь-яке місто
     if(/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|gdynia|bydgoszcz|toruń|olsztyn)\b/i.test(c))return c;
     return null;
   }
   function getNameFromBot(t){const m=t.match(/Dziękuję[,!\s]+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})/);return m?m[1]:null;}
   function buildSummary(){return hist.filter(m=>m.role==='user').slice(-4).map(m=>m.content.slice(0,80)).join(' | ');}
   function buildFullChat(){return hist.map(m=>(m.role==='user'?'👤 ':'🤖 ')+m.content).join('\n---\n');}
+
+  function getAllDims(){
+    const all=hist.map(m=>m.content).join(' ');
+    const dims=[...new Set([...all.matchAll(/(\d{2,3})\s*[xX\u00d7]\s*(\d{2,3})\s*cm/g)].map(m=>{
+      if(ses.circleSize&&m[1]===ses.circleSize)return 'okr\u0105g \u2300'+m[1]+' cm';
+      return m[1]+'\u00d7'+m[2]+' cm';
+    }))];
+    return dims.length?dims.join(', '):null;
+  }
 
   function formatProductForTG(){
     if(!ses.product) return 'уточнюється';
@@ -290,8 +320,8 @@
     const utm=getUTM(),u=[utm.source,utm.medium,utm.campaign].filter(Boolean).join(' / ')||'прямий';
     const pNum=parseFloat(ses.price)||0;
     const delivery=pNum>=500?'gratis':'18';
-    const total=pNum>=500?pNum:pNum+18;
-    ses.total=String(total);
+    const total=pNum>0?(pNum>=500?pNum:pNum+18):0;
+    ses.total=total>0?String(total):'';
     try{
       await fetch(WORKER_URL+'/lead',{
         method:'POST',headers:{'Content-Type':'application/json'},
