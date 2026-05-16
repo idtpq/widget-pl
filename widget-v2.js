@@ -250,18 +250,21 @@
     return all.length ? all[all.length-1][1] : null;
   }
   function getProduct(userText, botText) {
+    // Найкраще джерело — підтверджуюче повідомлення бота
+    // Шукаємо список товарів формату "- Błyszczące 2mm, 100×100 cm"
+    const listMatches = [...botText.matchAll(/[-–]\s*([Bb]łyszczące\s*[0-9.]+mm|[Rr]yflowane\s*[0-9.]+mm|[Ww]yprzedaż)[^\n]*/g)];
+    if (listMatches.length > 0) {
+      return listMatches.map(m => m[0].replace(/^[-–]\s*/, '').trim()).join(' | ');
+    }
+    // Fallback — з усієї розмови
     const allText = hist.map(m => m.content).join(' ');
-    // Товщина
-    const thickMatch = allText.match(/[Bb]łyszczące\s*(1\.5|2)\s*mm|[Mm]atowe\s*1\.5\s*mm|[Ww]yprzedaż/);
-    const thick = thickMatch ? thickMatch[0].replace(/[Bb]/,'B').replace(/[Mm]/,'M') : '';
-    // Розміри прямокутні
     const dimMatches = [...allText.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
     const dims = [...new Set(dimMatches.map(m => `${m[1]}×${m[2]} cm`))];
-    // Кола — ловимо "okrągłe 120cm", "okrąg 120", "średnica 120", "⌀120"
-    const circleMatches = [...allText.matchAll(/(?:okr[ąa]g(?:łe)?|średnica|śr\.|⌀)[\s:]*?(\d{2,3})\s*cm/gi)];
+    const circleMatches = [...allText.matchAll(/(?:okr[ąa]g(?:łe)?|średnica)[\s:]*?(\d{2,3})\s*cm/gi)];
     const circles = [...new Set(circleMatches.map(m => `okrąg ⌀${m[1]} cm`))];
-    const parts = [thick, ...dims, ...circles].filter(Boolean);
-    return parts.length ? parts.join(', ') : null;
+    const thickMatches = [...allText.matchAll(/[Bb]łyszczące\s*([0-9.]+)mm|[Rr]yflowane\s*([0-9.]+)mm/g)];
+    const thicks = [...new Set(thickMatches.map(m => m[0]))];
+    return [...thicks, ...dims, ...circles].filter(Boolean).join(', ') || null;
   }
   function getAddress(t) {
     // Витягуємо тільки адресну частину — без email та телефону
@@ -289,14 +292,14 @@
   // ── Telegram ────────────────────────────────────────────────────────────────
   async function generatePaymentLink() {
     try {
-      // Беремо total з сесії (вже розраховано в тригері)
-      const priceNum = parseFloat(ses.price) || 0;
-      const deliveryCost = priceNum >= 500 ? 0 : 18;
-      const total = ses.total || String(priceNum + deliveryCost);
-      // Також пробуємо витягти "Razem: XXX zł" з останньої відповіді бота
       const lastBotMsg = hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content || '';
-      const razemMatch = lastBotMsg.match(/[Rr]azem[:\s]+(\d+)\s*z/);
-      const finalTotal = razemMatch ? razemMatch[1] : total;
+      // Витягуємо підсумкову суму з відповіді бота
+      const razemMatch = lastBotMsg.match(/[Łł][ąa]cznie[:\s]+(\d+)|[Rr]azem[:\s]+(\d+)/);
+      const priceNum   = parseFloat(ses.price) || 0;
+      const delivery   = priceNum >= 500 ? 0 : 18;
+      const fromBot    = razemMatch ? parseInt(razemMatch[1]||razemMatch[2]) : 0;
+      const finalTotal = ses.total || (fromBot > 0 ? String(fromBot) : String(priceNum + delivery));
+      console.log('[SG] Payment link total:', finalTotal, '| ses.price:', ses.price, '| ses.total:', ses.total);
 
       const res = await fetch(WORKER_URL + '/payment', {
         method: 'POST',
@@ -317,9 +320,12 @@
         showPaymentButton(data.url, finalTotal);
       } else {
         console.error('[SG] Payment link error:', data.error);
+        // Показуємо повідомлення про помилку Stripe
+        addBot('Przepraszamy, wystąpił problem z generowaniem linku płatności. Proszę skontaktować się: elastyczneszklopl@gmail.com lub tel. +48 45 104 05 40');
       }
     } catch(e) {
-      console.error('[SG] generatePaymentLink error:', e);
+      console.error('[SG] generatePaymentLink error:', e.message);
+      addBot('Przepraszamy, problem techniczny. Proszę skontaktować się: elastyczneszklopl@gmail.com');
     }
   }
 
