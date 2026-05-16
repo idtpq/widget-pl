@@ -16,7 +16,8 @@
   });
 
   function genSID() {
-    return 'SG-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
+    // Короткий номер: № + 6 цифр
+    return '№ ' + String(Math.floor(100000 + Math.random() * 900000));
   }
 
   const CSS = `
@@ -76,7 +77,7 @@
   let open=false, busy=false, started=false;
   let hist=[];
   let ses={
-    name:null,phone:null,email:null,contact:null,
+    name:null,phone:null,email:null,contact:null,circleSize:null,
     price:null,product:null,address:null,
     paymentMethod:null,total:null,
     leadSent:false,addressSent:false,paymentLinkSent:false,
@@ -175,13 +176,15 @@
   }
 
   function showPayBtn(url, total){
+    clearQR();
     const w=document.createElement('div');w.className='sg-pay-wrap';
     w.innerHTML=`<a href="${url}" target="_blank" rel="noopener" class="sg-pay-btn">💳 Zapłać ${total} zł</a>`;
     el('sg-log').appendChild(w);scroll();
   }
   function showCOD(total){
+    clearQR();
     const d=document.createElement('div');d.className='sg-cod-box';
-    d.innerHTML=`✅ Zamówienie przyjęte!<br>Płatność za pobraniem: <strong>${total} zł</strong><br>Skontaktujemy się wkrótce.`;
+    d.innerHTML=`✅ Zamówienie przyjęte!<br><strong>${SID}</strong><br>Płatność za pobraniem: <strong>${total} zł</strong><br>Skontaktujemy się wkrótce.`;
     el('sg-log').appendChild(d);scroll();
   }
 
@@ -208,13 +211,26 @@
   }
   function getPrice(t){const all=[...t.matchAll(/(\d+)\s*zł/g)];return all.length?all[all.length-1][1]:null;}
   function getProduct(botText){
-    const list=[...botText.matchAll(/[-–]\s*([Bb]łyszczące\s*[0-9.]+mm|[Rr]yflowane\s*[0-9.]+mm|[Ww]yprzedaż)[^\n]*/g)];
-    if(list.length>0)return list.map(m=>m[0].replace(/^[-–]\s*/,'').trim()).join(' | ');
-    const all=hist.map(m=>m.content).join(' ');
-    const dims=[...new Set([...all.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)].map(m=>`${m[1]}×${m[2]} cm`))];
-    const thick=all.match(/[Bb]łyszczące\s*([0-9.]+)mm|[Rr]yflowane\s*([0-9.]+)mm/);
-    return[thick?thick[0]:'',...dims].filter(Boolean).join(', ')||null;
+    const list=[...botText.matchAll(/[-–]\s*([Bb]\u0142yszcz\u0105ce\s*[0-9.]+mm|[Rr]yflowane\s*[0-9.]+mm|[Ww]yprzeda\u017c)[^\n]*/g)];
+    let product=null;
+    if(list.length>0){product=list.map(m=>m[0].replace(/^[-–]\s*/,'').trim()).join(' | ');}
+    else{
+      const all=hist.map(m=>m.content).join(' ');
+      const allDims=[...all.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
+      const dims=[...new Set(allDims.map(m=>{
+        if(ses.circleSize&&m[1]===ses.circleSize&&m[2]===ses.circleSize)return 'okrąg ⌀'+m[1]+' cm';
+        return m[1]+'×'+m[2]+' cm';
+      }))];
+      const thick=all.match(/[Bb]\u0142yszcz\u0105ce\s*([0-9.]+)mm|[Rr]yflowane\s*([0-9.]+)mm/);
+      product=[thick?thick[0]:'',...dims].filter(Boolean).join(', ')||null;
+    }
+    if(product&&ses.circleSize){
+      product=product.replace(ses.circleSize+'×'+ses.circleSize+' cm','okrąg ⌀'+ses.circleSize+' cm');
+      product=product.replace(ses.circleSize+'x'+ses.circleSize+' cm','okrąg ⌀'+ses.circleSize+' cm');
+    }
+    return product;
   }
+
   function getAddress(t){
     let c=t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'').replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'').replace(/\s+/g,' ').trim();
     if(/\d{2}-\d{3}/.test(c))return c;
@@ -281,6 +297,31 @@
     // Payment method detection
     if(text.includes('Za pobraniem')||text.toLowerCase().includes('pobraniem'))ses.paymentMethod='cod';
     if(text.includes('Online')||text.includes('karta')||text.includes('BLIK'))ses.paymentMethod='stripe';
+
+    // Circle detection - if user confirms okrągły, find last same-dimension and convert
+    if(/tak.*okr[ąa]g|okr[ąa]g.*tak/i.test(text) || text === 'Tak, okrągły') {
+      const allText = hist.map(m=>m.content).join(' ');
+      const sameDims = [...allText.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)]
+        .filter(m => m[1] === m[2]);
+      if(sameDims.length > 0) {
+        const d = sameDims[sameDims.length-1][1];
+        ses.circleSize = d;
+        // Replace same-dim entry in product with circle notation
+        if(ses.product) ses.product = ses.product.replace(new RegExp(d+'[×x]'+d+'\s*cm'), 'okrąg ⌀'+d+' cm');
+        else ses.product = 'okrąg ⌀'+d+' cm';
+      }
+    }
+
+    // Payment method change after stripe failure
+    if(ses.paymentLinkSent && !ses.paymentMethod !== 'cod' &&
+       /pobraniem|zmienić.*met|cod|za pobraniem/i.test(text)) {
+      ses.paymentMethod = 'cod';
+      const pNum = parseFloat(ses.price)||0;
+      const total = pNum>=500?pNum:pNum+18;
+      ses.total = String(total);
+      showCOD(total);
+      sendLead();
+    }
 
     // Extract contacts
     const phone=getPhone(text),email=getEmail(text),name=getName(text),addr=getAddress(text);
