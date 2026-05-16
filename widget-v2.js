@@ -2,6 +2,7 @@
   'use strict';
 
   const WORKER_URL = 'https://plain-bush-fa6chatbotfilmfy.gavreliuk54.workers.dev';
+  // Telegram тепер у Cloudflare Worker — ключі не видно в браузері
 
   function getUTM() {
     const p = new URLSearchParams(window.location.search);
@@ -250,16 +251,16 @@
   }
   function getProduct(userText, botText) {
     const allText = hist.map(m => m.content).join(' ');
-    // Розміри
+    // Товщина
+    const thickMatch = allText.match(/[Bb]łyszczące\s*(1\.5|2)\s*mm|[Mm]atowe\s*1\.5\s*mm|[Ww]yprzedaż/);
+    const thick = thickMatch ? thickMatch[0].replace(/[Bb]/,'B').replace(/[Mm]/,'M') : '';
+    // Розміри прямокутні
     const dimMatches = [...allText.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
     const dims = [...new Set(dimMatches.map(m => `${m[1]}×${m[2]} cm`))];
-    // Товщина
-    const thickMatch = allText.match(/[Bb]łyszczące\s*(1\.5|2)mm|[Mm]atowe\s*1\.5mm|[Ww]yprzedaż/);
-    const thick = thickMatch ? thickMatch[0].replace(/[Bb]łyszczące/,'Błyszczące').replace(/[Mm]atowe/,'Matowe') : '';
-    // Коло
-    const circleMatch = allText.match(/śr(?:ednica)?[\.:\s]*(\d{2,3})\s*cm|okrąg[\s:]+?(\d{2,3})|kolo[\s:]+?(\d{2,3})/i);
-    const circle = circleMatch ? `okrąg ⌀${circleMatch[1]||circleMatch[2]||circleMatch[3]} cm` : '';
-    const parts = [thick, ...dims, circle].filter(Boolean);
+    // Кола — ловимо "okrągłe 120cm", "okrąg 120", "średnica 120", "⌀120"
+    const circleMatches = [...allText.matchAll(/(?:okr[ąa]g(?:łe)?|średnica|śr\.|⌀)[\s:]*?(\d{2,3})\s*cm/gi)];
+    const circles = [...new Set(circleMatches.map(m => `okrąg ⌀${m[1]} cm`))];
+    const parts = [thick, ...dims, ...circles].filter(Boolean);
     return parts.length ? parts.join(', ') : null;
   }
   function getAddress(t) {
