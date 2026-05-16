@@ -205,11 +205,21 @@
     // Register COD change handler
     window.__sgChangeToCOD = function(t) {
       ses.paymentMethod = 'cod';
-      ses.paymentLinkSent = false; // allow re-trigger
       clearQR();
       showCOD(t);
-      addBot('Zmieniono na płatność za pobraniem. Nr zamówienia: ' + SID + '. Skontaktujemy się wkrótce!');
-      sendLead();
+      // Відправляємо повідомлення про зміну методу
+      fetch(WORKER_URL+'/lead',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          session_id:SID,name:ses.name||'',phone:ses.phone||'',email:ses.email||'',
+          contact:ses.contact||'',product:ses.product||'',
+          product_formatted:formatProductForTG(),
+          price:ses.price||'',delivery:parseFloat(ses.price)>=500?'gratis':'18',
+          total:t,address:ses.address||'',
+          payment_method:'cod',is_method_change:true,
+          summary:buildSummary(),full_chat:buildFullChat(),
+        }),
+      }).catch(e=>console.error(e));
     };
   }
   function showCOD(total){
@@ -238,11 +248,16 @@
   // Data extraction
   function getPhone(t){const m=t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);return m?m[0].replace(/[\s-]/g,''):null;}
   function getEmail(t){const m=t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:null;}
+  // Слова які НЕ є іменами (кнопки, фрази)
+  const NOT_NAMES = ['chcę zamówić','mam pytanie','intensywnie','rzadziej','drewno','szkło','laminat','online','pobraniem','tak,','nie,','okrągły','prostokątny','zamówienie','jedno','osobne','mocniejsze','tańsze','oblicz'];
   function getName(t){
-    // Ім'я Прізвище (будь-який регістр)
-    const m=t.match(/[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,}\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,}/);
-    if(m&&!m[0].includes('@'))return m[0];
-    const m2=t.match(/(?:jestem|nazywam się)\s+([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+)/i);
+    const tl = t.toLowerCase();
+    // Перевіряємо що це не текст кнопки
+    if(NOT_NAMES.some(w=>tl.startsWith(w)||tl===w))return null;
+    // Мінімум 2 слова, кожне 2+ букв, тільки літери (не цифри, не спецсимволи)
+    const m=t.match(/^([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{1,}|[a-zżźćąśęłóńA-ZŻŹĆĄŚĘŁÓŃ]{2,})\s+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{1,}|[a-z]{2,})(?=[,\s]|$)/);
+    if(m&&!m[0].match(/\d/)&&m[0].length>4)return m[0];
+    const m2=t.match(/(?:jestem|nazywam się|imię:\s*)([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+(?:\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+)?)/i);
     return m2?m2[1]:null;
   }
   function getPrice(t){const all=[...t.matchAll(/(\d+)\s*zł/g)];return all.length?all[all.length-1][1]:null;}
@@ -274,22 +289,24 @@
     return product;
   }
 
+  const ADDR_EXCLUDE = /^(\d+mm|\d+\s*[xX]|błyszcz|ryflowane|wyprzedaż|mocniejsz|tańsze|online|pobraniem|intensywnie|rzadziej|drewno|szkło|laminat|tak,|nie,|okrągły|zamawiam|mam pytanie|chcę)/i;
   function getAddress(t){
-    // Видаляємо email, телефон, імʼя — решта = адреса
-    let c=t
-      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'')
-      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'')
-      .replace(/^[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,}\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,}/,'') // прибираємо ім'я
-      .replace(/[,;]+/g,',').replace(/\s+/g,' ').trim()
-      .replace(/^[,\s]+|[,\s]+$/g,'').trim();
-    if(!c||c.length<5)return null;
-    // Якщо є цифра + текст — скоріш за все адреса
-    if(/\d/.test(c)&&c.length>5)return c;
-    // Польський індекс
-    if(/\d{2}-\d{3}/.test(c))return c;
-    if(/ul\.|ulica|al\.|aleja/i.test(c))return c;
-    // Будь-яке місто
-    if(/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|gdynia|bydgoszcz|toruń|olsztyn)\b/i.test(c))return c;
+    // Виключаємо тексти кнопок і продуктів
+    if(ADDR_EXCLUDE.test(t.trim()))return null;
+    // Потрібно щоб повідомлення містило email або телефон — тоді решта = адреса
+    const hasContact=/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(t)||/(\+48)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/.test(t);
+    // Польський індекс — надійний сигнал
+    if(/\d{2}-\d{3}/.test(t)){
+      let c=t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'').replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'').replace(/^[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+/,'').replace(/[,\s]+$/,'').replace(/^[,\s]+/,'').trim();
+      return c||t.trim();
+    }
+    if(/ul\.|ulica|al\.|aleja/i.test(t))return t.trim();
+    if(/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|gdynia|bydgoszcz|toruń|olsztyn)\b/i.test(t))return t.trim();
+    // Якщо є контакт і залишився текст — берем як адресу
+    if(hasContact){
+      let c=t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'').replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'').replace(/^[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+/,'').replace(/[,\s]+$/,'').replace(/^[,\s]+/,'').trim();
+      if(c&&c.length>3&&!ADDR_EXCLUDE.test(c))return c;
+    }
     return null;
   }
   function getNameFromBot(t){const m=t.match(/Dziękuję[,!\s]+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})/);return m?m[1]:null;}
@@ -314,6 +331,29 @@
       if(p.includes('okrąg') || p.includes('⌀')) return '⭕ ' + p;
       return '▪️ ' + p;
     }).join('\n');
+  }
+
+  async function sendLeadWithStripe(stripeUrl){
+    const utm=getUTM(),u=[utm.source,utm.medium,utm.campaign].filter(Boolean).join(' / ')||'прямий';
+    const pNum=parseFloat(ses.price)||0;
+    const delivery=pNum>=500?'gratis':'18';
+    const total=pNum>0?(pNum>=500?pNum:pNum+18):0;
+    try{
+      await fetch(WORKER_URL+'/lead',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          session_id:SID,name:ses.name||'',phone:ses.phone||'',email:ses.email||'',
+          contact:ses.contact||'',product:ses.product||'',
+          product_formatted:formatProductForTG(),
+          price:ses.price||'',delivery,total:total||'',
+          address:ses.address||'',payment_method:'stripe',
+          stripe_url:stripeUrl,
+          summary:buildSummary(),full_chat:buildFullChat(),
+          utm_source:utm.source,utm_medium:utm.medium,utm_campaign:utm.campaign,
+        }),
+      });
+      console.log('[SG] Lead+Stripe sent');
+    }catch(e){console.error('[SG] LeadStripe error:',e);}
   }
 
   async function sendLead(){
@@ -356,8 +396,16 @@
         }),
       });
       const d=await res.json();
-      if(d.ok&&d.url){showPayBtn(d.url,finalTotal);}
-      else{console.error('[SG] Stripe:',d.error);addBot('Problem z płatnością online. Proszę skontaktować się: +48 45 104 05 40');}
+      if(d.ok&&d.url){
+        showPayBtn(d.url,finalTotal);
+        // Відправляємо лід з Stripe URL
+        if(ses._leadTimer)clearTimeout(ses._leadTimer);
+        ses.stripeUrl = d.url;
+        sendLeadWithStripe(d.url);
+      } else{
+        console.error('[SG] Stripe:',d.error);
+        addBot('Problem z płatnością online. Proszę skontaktować się: +48 45 104 05 40');
+      }
     }catch(e){console.error('[SG] Stripe error:',e);}
   }
 
