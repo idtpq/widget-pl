@@ -283,8 +283,7 @@
       // Detect circle
       if(p.includes('okrąg') || p.includes('⌀')) return '⭕ ' + p;
       return '▪️ ' + p;
-    }).join('
-');
+    }).join('\n');
   }
 
   async function sendLead(){
