@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const WORKER_URL = 'https://bot.gavreliuk54.workers.dev';
+  const WORKER_URL = 'https://plain-bush-fa6chatbotfilmfy.gavreliuk54.workers.dev';
   // Telegram тепер у Cloudflare Worker — ключі не видно в браузері
 
   function getUTM() {
@@ -415,12 +415,18 @@
       addBot(reply); addTime();
 
       // ── Генеруємо Stripe Payment Link при підтвердженні замовлення ────────
-      const isConfirmation = /przyjęłam zamówienie|link do płatności|razem:/i.test(reply);
-      if (isConfirmation && ses.contact && ses.price && !ses.paymentLinkSent) {
+      const isConfirmation = /przyjęłam zamówienie|pojawi się za chwilę|razem:/i.test(reply);
+      if (isConfirmation && ses.contact && !ses.paymentLinkSent) {
         ses.paymentLinkSent = true;
-        // Рахуємо total прямо тут
-        const pNum = parseFloat(ses.price) || 0;
-        ses.total = String(pNum >= 500 ? pNum : pNum + 18);
+        // Витягуємо "Razem: 417 zł" або "Cena szkła: 399 zł" з відповіді бота
+        const razemMatch = reply.match(/[Rr]azem[:\s]+(\d+)/);
+        const cenaMatch  = reply.match(/[Cc]ena szkł[ae][:\s]+(\d+)/);
+        const extractedTotal = razemMatch ? razemMatch[1] : (cenaMatch ? cenaMatch[1] : null);
+        if (extractedTotal) ses.total = extractedTotal;
+        else {
+          const pNum = parseFloat(ses.price) || 0;
+          ses.total = String(pNum >= 500 ? pNum : pNum + 18);
+        }
         generatePaymentLink();
       }
 
