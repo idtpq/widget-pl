@@ -97,7 +97,7 @@
           </div>
           <button id="sg-x">✕</button>
         </div>
-        <div id="sg-sid">ID zamówienia: ${SID}</div>
+        <div id="sg-sid">ID czatu: ${SID}</div>
         <div id="sg-log" role="log" aria-live="polite"></div>
         <div id="sg-qr"></div>
         <div id="sg-ft">
@@ -155,36 +155,69 @@
   function clearQR(){el('sg-qr').innerHTML='';}
 
   function detectQR(botText){
-    const t=botText.toLowerCase();
+    // Показуємо кнопки ТІЛЬКИ якщо в повідомленні є РІВНО ОДНЕ питання
+    const questionCount = (botText.match(/[?]/g)||[]).length;
+    if(questionCount > 1) return; // Два питання = не показуємо кнопки
+
+    const t = botText.toLowerCase();
+
+    // Не показуємо кнопки після підтвердження замовлення або платежу
+    if(ses.paymentLinkSent) return;
+    if(t.includes('przyjęłam zamówienie')) return;
+
     if(t.includes('złożyć zamówienie')||t.includes('pytanie o produkt')){
       setQR(['🛒 Chcę zamówić','❓ Mam pytanie']);
-    } else if((t.includes('rodzaj blatu')||t.includes('jaki rodzaj'))&&t.includes('drewno')){
-      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat','Inne']);
-    } else if(t.includes('intensywnie')||(t.includes('jak często')||t.includes('jak intensywnie'))){
+    } else if((t.includes('rodzaj blatu')||t.includes('jaki rodzaj blatu'))){
+      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat']);
+    } else if(t.includes('intensywnie')&&!t.includes('wymiary')){
       setQR(['Intensywnie (kuchnia/dzieci)','Rzadziej (biurko/salon)']);
-    } else if(t.includes('1.5mm')&&t.includes('2mm')){
-      setQR(['1.5mm — tańsze','2mm — mocniejsze','Oblicz obie opcje']);
-    } else if(t.includes('okrągły')||t.includes('okrągłe')||t.includes('okrąg')){
+    } else if(t.includes('1.5mm')&&t.includes('2mm')&&!t.includes('wymiary')){
+      setQR(['1.5mm — tańsze','2mm — mocniejsze']);
+    } else if((t.includes('okrągły')||t.includes('jest okrągły'))&&!t.includes('wymiary')){
       setQR(['Tak, okrągły','Nie, prostokątny']);
-    } else if(t.includes('kolejny')&&t.includes('kawałek')){
-      setQR(['Tak, jedno zamówienie','Nie, osobne zamówienie']);
-    } else if((t.includes('jak woli')&&t.includes('zapłaci'))||t.includes('metod')){
+    } else if(t.includes('inne stoły')||t.includes('inne blaty')||t.includes('jeszcze inne')){
+      setQR(['Tak, mam jeszcze','Nie, to wszystko']);
+    } else if((t.includes('jak woli')&&t.includes('zapłaci'))||(t.includes('metod')&&t.includes('płat'))){
       setQR(['💳 Online (karta/BLIK)','🚚 Za pobraniem']);
-    } else if(t.includes('chce pan')&&t.includes('złożyć zamówienie')){
-      setQR(['Tak, zamawiam!','Mam jeszcze pytanie']);
     }
   }
 
   function showPayBtn(url, total){
     clearQR();
-    const w=document.createElement('div');w.className='sg-pay-wrap';
-    w.innerHTML=`<a href="${url}" target="_blank" rel="noopener" class="sg-pay-btn">💳 Zapłać ${total} zł</a>`;
+    // Змінюємо заголовок на "ID zamówienia"
+    const sidEl = el('sg-sid');
+    if(sidEl) sidEl.textContent = 'Nr zamówienia: ' + SID;
+
+    const w = document.createElement('div');
+    w.style.cssText = 'padding:8px 12px;';
+    w.innerHTML = `
+      <div style="font-size:13px;color:#374151;margin-bottom:8px;line-height:1.4;">
+        Zamówienie <strong>${SID}</strong> zostanie przekazane do realizacji po opłaceniu.
+      </div>
+      <div style="display:flex;justify-content:center;margin-bottom:8px;">
+        <a href="${url}" target="_blank" rel="noopener" class="sg-pay-btn">💳 Zapłać ${total} zł</a>
+      </div>
+      <div style="font-size:11px;color:#9ca3af;text-align:center;cursor:pointer;" onclick="window.__sgChangeToCOD&&window.__sgChangeToCOD(${total})">
+        Zmienić na płatność za pobraniem →
+      </div>`;
     el('sg-log').appendChild(w);scroll();
+
+    // Register COD change handler
+    window.__sgChangeToCOD = function(t) {
+      ses.paymentMethod = 'cod';
+      ses.paymentLinkSent = false; // allow re-trigger
+      clearQR();
+      showCOD(t);
+      addBot('Zmieniono na płatność za pobraniem. Nr zamówienia: ' + SID + '. Skontaktujemy się wkrótce!');
+      sendLead();
+    };
   }
   function showCOD(total){
     clearQR();
+    const sidEl = el('sg-sid');
+    if(sidEl) sidEl.textContent = 'Nr zamówienia: ' + SID;
     const d=document.createElement('div');d.className='sg-cod-box';
-    d.innerHTML=`✅ Zamówienie przyjęte!<br><strong>${SID}</strong><br>Płatność za pobraniem: <strong>${total} zł</strong><br>Skontaktujemy się wkrótce.`;
+    d.innerHTML='✅ Zamówienie przyjęte!<br>Nr zamówienia: <strong>'+SID+'</strong><br>Płatność za pobraniem: <strong>'+total+' zł</strong><br>Skontaktujemy się wkrótce.';
     el('sg-log').appendChild(d);scroll();
   }
 
@@ -242,6 +275,18 @@
   function buildSummary(){return hist.filter(m=>m.role==='user').slice(-4).map(m=>m.content.slice(0,80)).join(' | ');}
   function buildFullChat(){return hist.map(m=>(m.role==='user'?'👤 ':'🤖 ')+m.content).join('\n---\n');}
 
+  function formatProductForTG(){
+    if(!ses.product) return 'уточнюється';
+    // Split by | and format each line
+    return ses.product.split('|').map(p => {
+      p = p.trim();
+      // Detect circle
+      if(p.includes('okrąg') || p.includes('⌀')) return '⭕ ' + p;
+      return '▪️ ' + p;
+    }).join('
+');
+  }
+
   async function sendLead(){
     const utm=getUTM(),u=[utm.source,utm.medium,utm.campaign].filter(Boolean).join(' / ')||'прямий';
     const pNum=parseFloat(ses.price)||0;
@@ -254,6 +299,7 @@
         body:JSON.stringify({
           session_id:SID,name:ses.name||'',phone:ses.phone||'',email:ses.email||'',
           contact:ses.contact||'',product:ses.product||'',price:ses.price||'',
+          product_formatted: formatProductForTG(),
           delivery,total:ses.total,address:ses.address||'',
           payment_method:ses.paymentMethod||'не вказано',
           summary:buildSummary(),full_chat:buildFullChat(),
