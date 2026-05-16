@@ -2,150 +2,91 @@
   'use strict';
 
   const WORKER_URL = 'https://bot.gavreliuk54.workers.dev';
-  // Telegram тепер у Cloudflare Worker — ключі не видно в браузері
 
   function getUTM() {
-    const p = new URLSearchParams(window.location.search);
     return {
-      source:   p.get('utm_source')   || sessionStorage.getItem('sg_utm_source')   || '',
-      medium:   p.get('utm_medium')   || sessionStorage.getItem('sg_utm_medium')   || '',
-      campaign: p.get('utm_campaign') || sessionStorage.getItem('sg_utm_campaign') || '',
+      source:   new URLSearchParams(location.search).get('utm_source')   || sessionStorage.getItem('sg_utm_source')   || '',
+      medium:   new URLSearchParams(location.search).get('utm_medium')   || sessionStorage.getItem('sg_utm_medium')   || '',
+      campaign: new URLSearchParams(location.search).get('utm_campaign') || sessionStorage.getItem('sg_utm_campaign') || '',
     };
   }
   ['source','medium','campaign'].forEach(k => {
-    const v = new URLSearchParams(window.location.search).get('utm_'+k);
+    const v = new URLSearchParams(location.search).get('utm_'+k);
     if (v) sessionStorage.setItem('sg_utm_'+k, v);
   });
 
+  function genSID() {
+    return 'SG-' + Date.now().toString(36).toUpperCase() + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
+  }
+
   const CSS = `
-    #sg-root {
-      position: fixed; bottom: 24px; right: 24px; z-index: 2147483647;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    }
-    #sg-btn {
-      width: 58px; height: 58px; border-radius: 50%;
-      background: #1c3d2e; border: none; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      box-shadow: 0 4px 16px rgba(0,0,0,.22);
-      transition: transform .2s, box-shadow .2s; position: relative;
-    }
-    #sg-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,.28); }
-    #sg-btn svg { width: 26px; height: 26px; stroke: #fff; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
-    #sg-badge {
-      position: absolute; top: -2px; right: -2px;
-      width: 18px; height: 18px; border-radius: 50%;
-      background: #e53e3e; border: 2px solid #fff;
-      display: none; align-items: center; justify-content: center;
-      font-size: 10px; font-weight: 700; color: #fff;
-    }
-    #sg-box {
-      position: absolute; bottom: 70px; right: 0; width: 340px;
-      background: #fff; border-radius: 16px;
-      box-shadow: 0 8px 40px rgba(0,0,0,.15), 0 2px 8px rgba(0,0,0,.08);
-      display: flex; flex-direction: column; overflow: hidden;
-      max-height: calc(100vh - 120px);
-      transition: opacity .2s ease, transform .2s ease;
-      transform-origin: bottom right;
-    }
-    #sg-box.hidden { opacity: 0; transform: scale(.95) translateY(8px); pointer-events: none; }
-    #sg-hd {
-      background: #1c3d2e; padding: 14px 16px;
-      display: flex; align-items: center; gap: 10px; flex-shrink: 0;
-    }
-    .sg-hav {
-      width: 38px; height: 38px; border-radius: 50%;
-      background: rgba(255,255,255,.18);
-      display: flex; align-items: center; justify-content: center;
-      font-size: 16px; font-weight: 700; color: #fff; flex-shrink: 0;
-    }
-    .sg-htxt { flex: 1; min-width: 0; }
-    .sg-hname { color: #fff; font-size: 14px; font-weight: 600; line-height: 1.2; }
-    .sg-hsub { color: rgba(255,255,255,.6); font-size: 11px; margin-top: 2px; display: flex; align-items: center; gap: 5px; }
-    .sg-online { width: 6px; height: 6px; background: #68d391; border-radius: 50%; flex-shrink: 0; }
-    #sg-x {
-      background: none; border: none; cursor: pointer;
-      color: rgba(255,255,255,.5); font-size: 18px; line-height: 1;
-      padding: 2px 4px; transition: color .15s; flex-shrink: 0;
-    }
-    #sg-x:hover { color: #fff; }
-    #sg-log {
-      flex: 1; overflow-y: auto; padding: 14px 12px;
-      display: flex; flex-direction: column; gap: 10px;
-      background: #f7f6f3; min-height: 280px; max-height: 360px;
-    }
-    #sg-log::-webkit-scrollbar { width: 3px; }
-    #sg-log::-webkit-scrollbar-thumb { background: #d0c8bc; border-radius: 2px; }
-    .sg-row { display: flex; align-items: flex-end; gap: 7px; }
-    .sg-row.u { flex-direction: row-reverse; }
-    .sg-ava {
-      width: 26px; height: 26px; border-radius: 50%; background: #1c3d2e;
-      flex-shrink: 0; display: flex; align-items: center; justify-content: center;
-      font-size: 11px; font-weight: 700; color: #fff;
-    }
-    .sg-bubble {
-      max-width: 76%; padding: 9px 13px; font-size: 14px; line-height: 1.55;
-      word-break: break-word; white-space: pre-wrap; border-radius: 14px;
-    }
-    .sg-row.b .sg-bubble {
-      background: #fff; color: #1a1a1a; border-bottom-left-radius: 3px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.08);
-    }
-    .sg-row.u .sg-bubble { background: #1c3d2e; color: #fff; border-bottom-right-radius: 3px; }
-    .sg-typing .sg-bubble { padding: 11px 14px; }
-    .sg-dots span {
-      display: inline-block; width: 6px; height: 6px;
-      background: #b0a898; border-radius: 50%; margin: 0 2px;
-      animation: sg-b 1.2s infinite;
-    }
-    .sg-dots span:nth-child(2) { animation-delay: .2s; }
-    .sg-dots span:nth-child(3) { animation-delay: .4s; }
-    @keyframes sg-b { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
-    .sg-ts { text-align: center; font-size: 11px; color: #b8b0a4; margin: 2px 0; }
-    #sg-ft {
-      display: flex; gap: 8px; padding: 10px 12px;
-      border-top: 1px solid #ede8e0; background: #fff;
-      flex-shrink: 0; align-items: flex-end;
-    }
-    #sg-ta {
-      flex: 1; border: 1.5px solid #ddd7ce; border-radius: 10px;
-      padding: 9px 12px; font-size: 14px; line-height: 1.4;
-      resize: none; outline: none; max-height: 80px;
-      font-family: inherit; color: #1a1a1a;
-      background: #faf8f5; transition: border-color .15s;
-    }
-    #sg-ta:focus { border-color: #1c3d2e; background: #fff; }
-    #sg-ta::placeholder { color: #b8b0a4; }
-    #sg-go {
-      width: 38px; height: 38px; border-radius: 10px;
-      background: #1c3d2e; border: none; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-      flex-shrink: 0; transition: background .15s; padding: 0;
-    }
-    #sg-go:hover { background: #142d21; }
-    #sg-go:disabled { background: #c5bdb4; cursor: not-allowed; }
-    #sg-go svg { width: 17px; height: 17px; stroke: #fff; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    #sg-pw {
-      text-align: center; font-size: 10px; color: #c5bdb4;
-      padding: 5px; background: #fff; flex-shrink: 0;
-      border-top: 1px solid #f0ebe2; letter-spacing: .02em;
-    }
-    @media (max-width: 400px) {
-      #sg-root { bottom: 16px; right: 16px; }
-      #sg-box  { width: calc(100vw - 32px); right: 0; }
-    }
+    #sg-root{position:fixed;bottom:24px;right:24px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
+    #sg-btn{width:58px;height:58px;border-radius:50%;background:#1c3d2e;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.22);transition:transform .2s,box-shadow .2s;position:relative;}
+    #sg-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.28);}
+    #sg-btn svg{width:26px;height:26px;stroke:#fff;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
+    #sg-badge{position:absolute;top:-2px;right:-2px;width:18px;height:18px;border-radius:50%;background:#e53e3e;border:2px solid #fff;display:none;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;}
+    #sg-tooltip{position:absolute;bottom:68px;right:0;background:#1c3d2e;color:#fff;font-size:13px;padding:10px 14px;border-radius:12px 12px 0 12px;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2);display:none;cursor:pointer;line-height:1.4;}
+    #sg-tooltip:after{content:'';position:absolute;bottom:-6px;right:16px;border:6px solid transparent;border-top-color:#1c3d2e;border-bottom:none;}
+    #sg-box{position:absolute;bottom:70px;right:0;width:340px;background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.15);display:flex;flex-direction:column;overflow:hidden;max-height:calc(100vh - 120px);transition:opacity .2s,transform .2s;transform-origin:bottom right;}
+    #sg-box.hidden{opacity:0;transform:scale(.95) translateY(8px);pointer-events:none;}
+    #sg-hd{background:#1c3d2e;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
+    .sg-hav{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0;}
+    .sg-htxt{flex:1;min-width:0;}
+    .sg-hname{color:#fff;font-size:14px;font-weight:600;}
+    .sg-hsub{color:rgba(255,255,255,.6);font-size:11px;margin-top:2px;display:flex;align-items:center;gap:5px;}
+    .sg-online{width:6px;height:6px;background:#68d391;border-radius:50%;animation:sg-pulse 2s infinite;}
+    @keyframes sg-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+    #sg-x{background:none;border:none;cursor:pointer;color:rgba(255,255,255,.5);font-size:18px;line-height:1;padding:2px 4px;transition:color .15s;flex-shrink:0;}
+    #sg-x:hover{color:#fff;}
+    #sg-sid{text-align:center;font-size:10px;color:#b8b0a4;padding:3px 0;background:#f7f6f3;font-family:monospace;flex-shrink:0;}
+    #sg-log{flex:1;overflow-y:auto;padding:14px 12px;display:flex;flex-direction:column;gap:10px;background:#f7f6f3;min-height:220px;max-height:300px;}
+    #sg-log::-webkit-scrollbar{width:3px;}
+    #sg-log::-webkit-scrollbar-thumb{background:#d0c8bc;border-radius:2px;}
+    .sg-row{display:flex;align-items:flex-end;gap:7px;}
+    .sg-row.u{flex-direction:row-reverse;}
+    .sg-ava{width:26px;height:26px;border-radius:50%;background:#1c3d2e;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
+    .sg-bubble{max-width:78%;padding:9px 13px;font-size:14px;line-height:1.55;word-break:break-word;white-space:pre-wrap;border-radius:14px;}
+    .sg-row.b .sg-bubble{background:#fff;color:#1a1a1a;border-bottom-left-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+    .sg-row.u .sg-bubble{background:#1c3d2e;color:#fff;border-bottom-right-radius:3px;}
+    .sg-typing .sg-bubble{padding:11px 14px;}
+    .sg-dots span{display:inline-block;width:6px;height:6px;background:#b0a898;border-radius:50%;margin:0 2px;animation:sg-b 1.2s infinite;}
+    .sg-dots span:nth-child(2){animation-delay:.2s}.sg-dots span:nth-child(3){animation-delay:.4s}
+    @keyframes sg-b{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+    .sg-ts{text-align:center;font-size:11px;color:#b8b0a4;margin:2px 0;}
+    #sg-qr{padding:6px 10px 4px;display:flex;flex-wrap:wrap;gap:6px;background:#f7f6f3;flex-shrink:0;min-height:0;}
+    .sg-qbtn{background:#fff;border:1.5px solid #1c3d2e;color:#1c3d2e;border-radius:20px;padding:6px 13px;font-size:13px;cursor:pointer;transition:all .15s;font-family:inherit;line-height:1.3;}
+    .sg-qbtn:hover{background:#1c3d2e;color:#fff;}
+    .sg-pay-wrap{display:flex;justify-content:center;padding:8px 0;}
+    .sg-pay-btn{display:inline-flex;align-items:center;gap:8px;background:#16a34a;color:#fff;text-decoration:none;padding:13px 22px;border-radius:12px;font-size:15px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:background .15s;}
+    .sg-pay-btn:hover{background:#15803d;}
+    .sg-cod-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:13px;color:#15803d;text-align:center;margin:4px 12px;}
+    #sg-ft{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #ede8e0;background:#fff;flex-shrink:0;align-items:flex-end;}
+    #sg-ta{flex:1;border:1.5px solid #ddd7ce;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.4;resize:none;outline:none;max-height:80px;font-family:inherit;color:#1a1a1a;background:#faf8f5;transition:border-color .15s;}
+    #sg-ta:focus{border-color:#1c3d2e;background:#fff;}
+    #sg-ta::placeholder{color:#b8b0a4;}
+    #sg-go{width:38px;height:38px;border-radius:10px;background:#1c3d2e;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s;padding:0;align-self:flex-end;}
+    #sg-go:hover{background:#142d21;}
+    #sg-go:disabled{background:#c5bdb4;cursor:not-allowed;}
+    #sg-go svg{width:17px;height:17px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+    #sg-pw{text-align:center;font-size:10px;color:#c5bdb4;padding:5px;background:#fff;flex-shrink:0;border-top:1px solid #f0ebe2;}
+    @media(max-width:400px){#sg-root{bottom:16px;right:16px;}#sg-box{width:calc(100vw - 32px);right:0;}}
   `;
 
-  let open = false, busy = false, started = false;
-  let hist = [];
-  let ses  = { name: null, contact: null, phone: null, email: null, price: null, product: null, address: null, addressSent: false, total: null, paymentLinkSent: false, paymentUrl: null };
+  const SID = genSID();
+  let open=false, busy=false, started=false;
+  let hist=[];
+  let ses={
+    name:null,phone:null,email:null,contact:null,
+    price:null,product:null,address:null,
+    paymentMethod:null,total:null,
+    leadSent:false,addressSent:false,paymentLinkSent:false,
+    _leadTimer:null,
+  };
 
-  function inject() {
-    const s = document.createElement('style');
-    s.textContent = CSS;
-    document.head.appendChild(s);
-    const r = document.createElement('div');
-    r.id = 'sg-root';
-    r.innerHTML = `
+  function build(){
+    const s=document.createElement('style');s.textContent=CSS;document.head.appendChild(s);
+    const r=document.createElement('div');r.id='sg-root';
+    r.innerHTML=`
       <div id="sg-box" class="hidden">
         <div id="sg-hd">
           <div class="sg-hav">M</div>
@@ -153,18 +94,21 @@
             <div class="sg-hname">Marta — Doradca</div>
             <div class="sg-hsub"><span class="sg-online"></span>elastyczne-szklo.com</div>
           </div>
-          <button id="sg-x" aria-label="Zamknij">✕</button>
+          <button id="sg-x">✕</button>
         </div>
+        <div id="sg-sid">ID zamówienia: ${SID}</div>
         <div id="sg-log" role="log" aria-live="polite"></div>
+        <div id="sg-qr"></div>
         <div id="sg-ft">
           <textarea id="sg-ta" rows="1" placeholder="Napisz wiadomość…"></textarea>
-          <button id="sg-go" aria-label="Wyślij">
+          <button id="sg-go">
             <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
         <div id="sg-pw">elastyczne-szklo.com</div>
       </div>
-      <button id="sg-btn" aria-label="Otwórz czat">
+      <div id="sg-tooltip">💬 Możemy pomóc — zapytaj!</div>
+      <button id="sg-btn">
         <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span id="sg-badge"></span>
       </button>
@@ -172,314 +116,250 @@
     document.body.appendChild(r);
   }
 
-  const el = id => document.getElementById(id);
-  function scroll() { const l = el('sg-log'); l.scrollTop = l.scrollHeight; }
-
-  function addTime() {
-    const d = new Date(), t = document.createElement('div');
-    t.className = 'sg-ts';
-    t.textContent = d.getHours().toString().padStart(2,'0') + ':' + d.getMinutes().toString().padStart(2,'0');
+  const el=id=>document.getElementById(id);
+  function scroll(){const l=el('sg-log');l.scrollTop=l.scrollHeight;}
+  function addTime(){
+    const d=new Date(),t=document.createElement('div');
+    t.className='sg-ts';
+    t.textContent=d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
     el('sg-log').appendChild(t);
   }
-  function addBot(text) {
+  function addBot(text){
     el('sg-log').querySelector('.sg-typing')?.remove();
-    const row = document.createElement('div');
-    row.className = 'sg-row b';
-    row.innerHTML = `<div class="sg-ava">M</div><div class="sg-bubble">${text.replace(/\n/g,'<br>')}</div>`;
-    el('sg-log').appendChild(row); scroll();
+    const row=document.createElement('div');row.className='sg-row b';
+    row.innerHTML=`<div class="sg-ava">M</div><div class="sg-bubble">${text.replace(/\n/g,'<br>')}</div>`;
+    el('sg-log').appendChild(row);scroll();
   }
-  function addUser(text) {
-    const row = document.createElement('div');
-    row.className = 'sg-row u';
-    row.innerHTML = `<div class="sg-bubble">${text.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div>`;
-    el('sg-log').appendChild(row); scroll();
+  function addUser(text){
+    const row=document.createElement('div');row.className='sg-row u';
+    row.innerHTML=`<div class="sg-bubble">${text.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div>`;
+    el('sg-log').appendChild(row);clearQR();scroll();
   }
-  function showTyping() {
-    const row = document.createElement('div');
-    row.className = 'sg-row b sg-typing';
-    row.innerHTML = `<div class="sg-ava">M</div><div class="sg-bubble"><span class="sg-dots"><span></span><span></span><span></span></span></div>`;
-    el('sg-log').appendChild(row); scroll();
+  function showTyping(){
+    const row=document.createElement('div');row.className='sg-row b sg-typing';
+    row.innerHTML=`<div class="sg-ava">M</div><div class="sg-bubble"><span class="sg-dots"><span></span><span></span><span></span></span></div>`;
+    el('sg-log').appendChild(row);scroll();
   }
-  function lock(v) { el('sg-ta').disabled = v; el('sg-go').disabled = v; }
+  function lock(v){el('sg-ta').disabled=v;el('sg-go').disabled=v;}
 
-  async function openChat() {
-    open = true;
-    el('sg-box').classList.remove('hidden');
-    el('sg-badge').style.display = 'none';
-    if (!started) {
-      started = true;
-      showTyping();
-      await new Promise(r => setTimeout(r, 600));
+  function setQR(buttons){
+    const qr=el('sg-qr');qr.innerHTML='';
+    buttons.forEach(label=>{
+      const btn=document.createElement('button');
+      btn.className='sg-qbtn';btn.textContent=label;
+      btn.onclick=()=>send(label);
+      qr.appendChild(btn);
+    });
+  }
+  function clearQR(){el('sg-qr').innerHTML='';}
+
+  function detectQR(botText){
+    const t=botText.toLowerCase();
+    if(t.includes('złożyć zamówienie')||t.includes('pytanie o produkt')){
+      setQR(['🛒 Chcę zamówić','❓ Mam pytanie']);
+    } else if((t.includes('rodzaj blatu')||t.includes('jaki rodzaj'))&&t.includes('drewno')){
+      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat','Inne']);
+    } else if(t.includes('intensywnie')||(t.includes('jak często')||t.includes('jak intensywnie'))){
+      setQR(['Intensywnie (kuchnia/dzieci)','Rzadziej (biurko/salon)']);
+    } else if(t.includes('1.5mm')&&t.includes('2mm')){
+      setQR(['1.5mm — tańsze','2mm — mocniejsze','Oblicz obie opcje']);
+    } else if(t.includes('okrągły')||t.includes('okrągłe')||t.includes('okrąg')){
+      setQR(['Tak, okrągły','Nie, prostokątny']);
+    } else if(t.includes('kolejny')&&t.includes('kawałek')){
+      setQR(['Tak, jedno zamówienie','Nie, osobne zamówienie']);
+    } else if((t.includes('jak woli')&&t.includes('zapłaci'))||t.includes('metod')){
+      setQR(['💳 Online (karta/BLIK)','🚚 Za pobraniem']);
+    } else if(t.includes('chce pan')&&t.includes('złożyć zamówienie')){
+      setQR(['Tak, zamawiam!','Mam jeszcze pytanie']);
+    }
+  }
+
+  function showPayBtn(url, total){
+    const w=document.createElement('div');w.className='sg-pay-wrap';
+    w.innerHTML=`<a href="${url}" target="_blank" rel="noopener" class="sg-pay-btn">💳 Zapłać ${total} zł</a>`;
+    el('sg-log').appendChild(w);scroll();
+  }
+  function showCOD(total){
+    const d=document.createElement('div');d.className='sg-cod-box';
+    d.innerHTML=`✅ Zamówienie przyjęte!<br>Płatność za pobraniem: <strong>${total} zł</strong><br>Skontaktujemy się wkrótce.`;
+    el('sg-log').appendChild(d);scroll();
+  }
+
+  async function openChat(){
+    open=true;el('sg-box').classList.remove('hidden');
+    el('sg-badge').style.display='none';el('sg-tooltip').style.display='none';
+    if(!started){
+      started=true;showTyping();
+      await new Promise(r=>setTimeout(r,600));
       el('sg-log').querySelector('.sg-typing')?.remove();
-      addBot('Dzień dobry!\n\nJestem Marta — doradca w elastyczne-szklo.com. Pomogę dobrać odpowiednie szkło do Pana/Pani stołu.\n\nCzy chce Pan/Pani złożyć zamówienie, czy ma pytanie o produkt?');
-      addTime();
+      addBot('Dzień dobry!\n\nJestem Marta — doradca w elastyczne-szklo.com. Pomogę dobrać odpowiednie szkło ochronne do Pana/Pani stołu.\n\nCzy chce Pan/Pani złożyć zamówienie, czy ma pytanie o produkt?');
+      addTime();setQR(['🛒 Chcę zamówić','❓ Mam pytanie']);
     }
     el('sg-ta').focus();
   }
-  function closeChat() { open = false; el('sg-box').classList.add('hidden'); }
+  function closeChat(){open=false;el('sg-box').classList.add('hidden');}
 
-  // ── Витягуємо дані ──────────────────────────────────────────────────────────
-  function getPhone(t) {
-    const m = t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);
-    return m ? m[0].replace(/[\s-]/g,'') : null;
+  // Data extraction
+  function getPhone(t){const m=t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);return m?m[0].replace(/[\s-]/g,''):null;}
+  function getEmail(t){const m=t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:null;}
+  function getName(t){
+    const m=t.match(/[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+/);if(m)return m[0];
+    const m2=t.match(/(?:jestem|nazywam się)\s+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]+)/i);return m2?m2[1]:null;
   }
-  function getEmail(t) {
-    const m = t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);
-    return m ? m[0] : null;
+  function getPrice(t){const all=[...t.matchAll(/(\d+)\s*zł/g)];return all.length?all[all.length-1][1]:null;}
+  function getProduct(botText){
+    const list=[...botText.matchAll(/[-–]\s*([Bb]łyszczące\s*[0-9.]+mm|[Rr]yflowane\s*[0-9.]+mm|[Ww]yprzedaż)[^\n]*/g)];
+    if(list.length>0)return list.map(m=>m[0].replace(/^[-–]\s*/,'').trim()).join(' | ');
+    const all=hist.map(m=>m.content).join(' ');
+    const dims=[...new Set([...all.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)].map(m=>`${m[1]}×${m[2]} cm`))];
+    const thick=all.match(/[Bb]łyszczące\s*([0-9.]+)mm|[Rr]yflowane\s*([0-9.]+)mm/);
+    return[thick?thick[0]:'',...dims].filter(Boolean).join(', ')||null;
   }
-  function getName(t) {
-    // Ім'я + прізвище
-    const m1 = t.match(/[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{1,}\s+[A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{1,}/);
-    if (m1) return m1[0];
-    // Після "jestem/nazywam się/imię:"
-    const m2 = t.match(/(?:jestem|nazywam się|imię[:\s]+)\s*([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]{2,})/i);
-    if (m2) return m2[1];
-    // Одне слово з великої літери (якщо вже є контакт)
-    const m3 = t.match(/^([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})$/m);
-    if (m3) return m3[1];
+  function getAddress(t){
+    let c=t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'').replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'').replace(/\s+/g,' ').trim();
+    if(/\d{2}-\d{3}/.test(c))return c;
+    if(/ul\.|ulica|al\.|aleja/i.test(c))return c;
+    if(/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|gdynia|bydgoszcz|toruń|olsztyn)\b/i.test(c))return c;
     return null;
   }
-  function getNameFromBotReply(botText) {
-    // Бот каже "Dziękuję Pavlo!" або "Dziękuję, Pavlo"
-    const m = botText.match(/Dziękuję[,!\s]+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})/);
-    return m ? m[1] : null;
-  }
-  function getPrice(t) {
-    // Остання ціна в тексті (найбільш конкретна)
-    const all = [...t.matchAll(/(\d+)\s*zł/g)];
-    return all.length ? all[all.length-1][1] : null;
-  }
-  function getProduct(userText, botText) {
-    // Найкраще джерело — підтверджуюче повідомлення бота
-    // Шукаємо список товарів формату "- Błyszczące 2mm, 100×100 cm"
-    const listMatches = [...botText.matchAll(/[-–]\s*([Bb]łyszczące\s*[0-9.]+mm|[Rr]yflowane\s*[0-9.]+mm|[Ww]yprzedaż)[^\n]*/g)];
-    if (listMatches.length > 0) {
-      return listMatches.map(m => m[0].replace(/^[-–]\s*/, '').trim()).join(' | ');
-    }
-    // Fallback — з усієї розмови
-    const allText = hist.map(m => m.content).join(' ');
-    const dimMatches = [...allText.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
-    const dims = [...new Set(dimMatches.map(m => `${m[1]}×${m[2]} cm`))];
-    const circleMatches = [...allText.matchAll(/(?:okr[ąa]g(?:łe)?|średnica)[\s:]*?(\d{2,3})\s*cm/gi)];
-    const circles = [...new Set(circleMatches.map(m => `okrąg ⌀${m[1]} cm`))];
-    const thickMatches = [...allText.matchAll(/[Bb]łyszczące\s*([0-9.]+)mm|[Rr]yflowane\s*([0-9.]+)mm/g)];
-    const thicks = [...new Set(thickMatches.map(m => m[0]))];
-    return [...thicks, ...dims, ...circles].filter(Boolean).join(', ') || null;
-  }
-  function getAddress(t) {
-    // Витягуємо тільки адресну частину — без email та телефону
-    let clean = t
-      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '')
-      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g, '')
-      .replace(/\s+/g, ' ').trim();
+  function getNameFromBot(t){const m=t.match(/Dziękuję[,!\s]+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})/);return m?m[1]:null;}
+  function buildSummary(){return hist.filter(m=>m.role==='user').slice(-4).map(m=>m.content.slice(0,80)).join(' | ');}
+  function buildFullChat(){return hist.map(m=>(m.role==='user'?'👤 ':'🤖 ')+m.content).join('\n---\n');}
 
-    // Поштовий індекс — сильний сигнал
-    if (/\d{2}-\d{3}/.test(clean)) {
-      // Беремо частину від вулиці або міста до кінця
-      const m = clean.match(/([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ][\w\s.,\/\-]+\d{2}-\d{3}[\w\s]*)/);
-      return m ? m[0].trim() : clean;
-    }
-    if (/ul\.|ulica|al\.|aleja/i.test(clean)) return clean;
-    if (/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|bydgoszcz|toruń|olsztyn|gdynia|częstochowa|radom|sosnowiec|kielce|gliwice|zabrze|bytom|bielsko)\b/i.test(clean)) return clean;
-    return null;
-  }
-  function buildSummary() {
-    // Останні 3 повідомлення клієнта
-    const userMsgs = hist.filter(m => m.role === 'user').slice(-3);
-    return userMsgs.map(m => m.content.slice(0, 80)).join(' | ');
-  }
-
-  // ── Telegram ────────────────────────────────────────────────────────────────
-  async function generatePaymentLink() {
-    try {
-      const lastBotMsg = hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content || '';
-      // Витягуємо підсумкову суму з відповіді бота
-      const razemMatch = lastBotMsg.match(/[Łł][ąa]cznie[:\s]+(\d+)|[Rr]azem[:\s]+(\d+)/);
-      const priceNum   = parseFloat(ses.price) || 0;
-      const delivery   = priceNum >= 500 ? 0 : 18;
-      const fromBot    = razemMatch ? parseInt(razemMatch[1]||razemMatch[2]) : 0;
-      const finalTotal = ses.total || (fromBot > 0 ? String(fromBot) : String(priceNum + delivery));
-      console.log('[SG] Payment link total:', finalTotal, '| ses.price:', ses.price, '| ses.total:', ses.total);
-
-      const res = await fetch(WORKER_URL + '/payment', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          product:    ses.product || 'Elastyczne szkło',
-          total:      finalTotal,
-          name:       ses.name    || '',
-          contact:    ses.contact || '',
-          session_id: Math.random().toString(36).slice(2),
+  async function sendLead(){
+    const utm=getUTM(),u=[utm.source,utm.medium,utm.campaign].filter(Boolean).join(' / ')||'прямий';
+    const pNum=parseFloat(ses.price)||0;
+    const delivery=pNum>=500?'gratis':'18';
+    const total=pNum>=500?pNum:pNum+18;
+    ses.total=String(total);
+    try{
+      await fetch(WORKER_URL+'/lead',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          session_id:SID,name:ses.name||'',phone:ses.phone||'',email:ses.email||'',
+          contact:ses.contact||'',product:ses.product||'',price:ses.price||'',
+          delivery,total:ses.total,address:ses.address||'',
+          payment_method:ses.paymentMethod||'не вказано',
+          summary:buildSummary(),full_chat:buildFullChat(),
+          utm_source:utm.source,utm_medium:utm.medium,utm_campaign:utm.campaign,
         }),
       });
-      const data = await res.json();
-
-      if (data.ok && data.url) {
-        ses.paymentUrl = data.url;
-        // Показуємо кнопку оплати в чаті
-        showPaymentButton(data.url, finalTotal);
-      } else {
-        console.error('[SG] Payment link error:', data.error);
-        // Показуємо повідомлення про помилку Stripe
-        addBot('Przepraszamy, wystąpił problem z generowaniem linku płatności. Proszę skontaktować się: elastyczneszklopl@gmail.com lub tel. +48 45 104 05 40');
-      }
-    } catch(e) {
-      console.error('[SG] generatePaymentLink error:', e.message);
-      addBot('Przepraszamy, problem techniczny. Proszę skontaktować się: elastyczneszklopl@gmail.com');
-    }
+      console.log('[SG] Lead sent');
+    }catch(e){console.error('[SG] Lead error:',e);}
   }
 
-  function showPaymentButton(url, total) {
-    const msgs = el('sg-log');
-    const div  = document.createElement('div');
-    div.style.cssText = 'display:flex;justify-content:center;padding:8px 0';
-    div.innerHTML = `
-      <a href="${url}" target="_blank" rel="noopener"
-         style="display:inline-flex;align-items:center;gap:8px;
-                background:#16a34a;color:#fff;text-decoration:none;
-                padding:12px 20px;border-radius:12px;font-size:15px;
-                font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.15)">
-        💳 Zapłać ${total} zł
-      </a>`;
-    msgs.appendChild(div);
-    msgs.scrollTop = msgs.scrollHeight;
-  }
-
-  async function sendLead() {
-    const utm = getUTM();
-    const priceNum = parseFloat(ses.price) || 0;
-    const delivery = priceNum >= 500 ? 'gratis' : '18';
-    const totalNum = priceNum >= 500 ? priceNum : priceNum + 18;
-    ses.total = String(totalNum);
-    const total = totalNum;
-    try {
-      const r = await fetch(WORKER_URL + '/lead', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name:         ses.name    || '',
-          phone:        ses.phone   || '',
-          email:        ses.email   || '',
-          contact:      ses.contact || '',
-          product:      ses.product || '',
-          price:        ses.price   || '',
-          delivery:     delivery,
-          total:        total ? String(total) : '',
-          address:      ses.address || '',
-          summary:      buildSummary(),
-          full_chat:    hist.map(m => (m.role==='user'?'👤 ':'🤖 ') + m.content).join('\n---\n'),
-          utm_source:   utm.source,
-          utm_medium:   utm.medium,
-          utm_campaign: utm.campaign,
+  async function generateStripe(){
+    try{
+      const lastBot=hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content||'';
+      const rm=lastBot.match(/[Łł][ąa]cznie[:\s]+(\d+)|[Rr]azem[:\s]+(\d+)/);
+      const pNum=parseFloat(ses.price)||0;
+      const delivery=pNum>=500?0:18;
+      const fromBot=rm?parseInt(rm[1]||rm[2]):0;
+      const finalTotal=ses.total||(fromBot>0?String(fromBot):String(pNum+delivery));
+      console.log('[SG] Stripe total:',finalTotal);
+      const res=await fetch(WORKER_URL+'/payment',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          product:ses.product||'Elastyczne szkło',total:finalTotal,
+          name:ses.name||'',contact:ses.email||ses.phone||ses.contact||'',session_id:SID,
         }),
       });
-      const d = await r.json();
-      if (d.ok) console.log('[SG] Лід відправлено в Telegram');
-      else console.error('[SG] Telegram error:', d.error);
-    } catch(e) { console.error('[SG] Lead send error:', e); }
+      const d=await res.json();
+      if(d.ok&&d.url){showPayBtn(d.url,finalTotal);}
+      else{console.error('[SG] Stripe:',d.error);addBot('Problem z płatnością online. Proszę skontaktować się: +48 45 104 05 40');}
+    }catch(e){console.error('[SG] Stripe error:',e);}
   }
 
+  async function send(quickText){
+    const ta=el('sg-ta');
+    const text=(quickText||ta.value).trim();
+    if(!text||busy)return;
+    if(!quickText){ta.value='';ta.style.height='auto';}
+    busy=true;lock(true);
+    addUser(text);showTyping();
 
+    // Payment method detection
+    if(text.includes('Za pobraniem')||text.toLowerCase().includes('pobraniem'))ses.paymentMethod='cod';
+    if(text.includes('Online')||text.includes('karta')||text.includes('BLIK'))ses.paymentMethod='stripe';
 
-  // ── Відправка повідомлення ──────────────────────────────────────────────────
-  async function send() {
-    const ta   = el('sg-ta');
-    const text = ta.value.trim();
-    if (!text || busy) return;
-    ta.value = ''; ta.style.height = 'auto';
-    busy = true; lock(true);
-    addUser(text); showTyping();
+    // Extract contacts
+    const phone=getPhone(text),email=getEmail(text),name=getName(text),addr=getAddress(text);
+    if(phone&&!ses.phone)ses.phone=phone;
+    if(email&&!ses.email)ses.email=email;
+    if(name&&!ses.name)ses.name=name;
+    if(addr&&!ses.address)ses.address=addr;
+    if((phone||email)&&!ses.contact)ses.contact=phone||email;
 
-    const phone   = getPhone(text);
-    const email   = getEmail(text);
-    const name    = getName(text);
-    const addr    = getAddress(text);
-    if (phone && !ses.phone)   ses.phone   = phone;
-    if (email && !ses.email)   ses.email   = email;
-    // contact = перший знайдений (для зворотної сумісності)
-    if ((phone || email) && !ses.contact) ses.contact = phone || email;
-    if (name  && !ses.name)    ses.name    = name;
-    if (addr  && !ses.address) ses.address = addr;
+    hist.push({role:'user',content:text});
 
-    hist.push({ role: 'user', content: text });
-
-    try {
-      const res   = await fetch(WORKER_URL, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: hist }),
+    try{
+      const res=await fetch(WORKER_URL,{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({messages:hist}),
       });
-      const data  = await res.json();
-      const reply = data.content?.[0]?.text || 'Przepraszamy, spróbuj ponownie.';
-      hist.push({ role: 'assistant', content: reply });
+      const data=await res.json();
+      const reply=data.content?.[0]?.text||'Przepraszamy, spróbuj ponownie.';
+      hist.push({role:'assistant',content:reply});
 
-      const price      = getPrice(reply);
-      const product    = getProduct(text, reply);
-      const nameInBot  = getNameFromBotReply(reply);
-      if (price)           ses.price   = price;
-      if (product)         ses.product = product;   // завжди оновлюємо — може додатись новий товар
-      if (nameInBot && !ses.name) ses.name = nameInBot;
+      const price=getPrice(reply),product=getProduct(reply),nameBot=getNameFromBot(reply);
+      if(price)ses.price=price;
+      if(product)ses.product=product;
+      if(nameBot&&!ses.name)ses.name=nameBot;
 
-      addBot(reply); addTime();
+      addBot(reply);addTime();detectQR(reply);
 
-      // ── Генеруємо Stripe Payment Link при підтвердженні замовлення ────────
-      const isConfirmation = /przyjęłam zamówienie|pojawi się za chwilę|razem:/i.test(reply);
-      if (isConfirmation && ses.contact && !ses.paymentLinkSent) {
-        ses.paymentLinkSent = true;
-        // Витягуємо "Razem: 417 zł" або "Cena szkła: 399 zł" з відповіді бота
-        const razemMatch = reply.match(/[Rr]azem[:\s]+(\d+)/);
-        const cenaMatch  = reply.match(/[Cc]ena szkł[ae][:\s]+(\d+)/);
-        const extractedTotal = razemMatch ? razemMatch[1] : (cenaMatch ? cenaMatch[1] : null);
-        if (extractedTotal) ses.total = extractedTotal;
-        else {
-          const pNum = parseFloat(ses.price) || 0;
-          ses.total = String(pNum >= 500 ? pNum : pNum + 18);
-        }
-        generatePaymentLink();
+      // Lead debounce
+      if(ses.contact&&!ses.leadSent)ses.leadSent=true;
+      if(ses.address&&!ses.addressSent)ses.addressSent=true;
+      if(ses.leadSent){
+        if(ses._leadTimer)clearTimeout(ses._leadTimer);
+        ses._leadTimer=setTimeout(()=>{ses._leadTimer=null;sendLead();},3000);
       }
 
-      // Дебаунс 3 сек — скільки б даних не прийшло в одному/кількох повідомленнях,
-      // відправляємо ОДИН раз після паузи
-      if ((ses.phone || ses.email) && !ses.leadSent) {
-        ses.leadSent = true;
-        ses.contact = ses.phone || ses.email; // оновлюємо contact
-      }
-      if (ses.leadSent) {
-        if (ses._leadTimer) clearTimeout(ses._leadTimer);
-        ses._leadTimer = setTimeout(() => {
-          ses._leadTimer = null;
+      // Payment trigger
+      const isConfirm=/przyjęłam zamówienie|pojawi się za chwilę|łącznie|razem:/i.test(reply);
+      if(isConfirm&&ses.contact&&!ses.paymentLinkSent){
+        ses.paymentLinkSent=true;
+        if(ses.paymentMethod==='cod'){
+          const pNum=parseFloat(ses.price)||0;
+          showCOD(pNum>=500?pNum:pNum+18);
+          if(ses._leadTimer)clearTimeout(ses._leadTimer);
           sendLead();
-        }, 3000);
+        } else {
+          generateStripe();
+        }
       }
-
-    } catch {
+    }catch(e){
       el('sg-log').querySelector('.sg-typing')?.remove();
       addBot('Brak połączenia. Proszę odświeżyć stronę.');
-    } finally {
-      busy = false; lock(false); el('sg-ta').focus();
+    }finally{
+      busy=false;lock(false);el('sg-ta').focus();
     }
   }
 
-  function autoOpen() {
-    if (sessionStorage.getItem('sg_v')) return;
-    setTimeout(() => { if (!open) el('sg-badge').style.display = 'flex'; }, 10000);
-    setTimeout(() => { if (!open) { sessionStorage.setItem('sg_v','1'); openChat(); } }, 25000);
+  function autoOpen(){
+    if(sessionStorage.getItem('sg_v'))return;
+    setTimeout(()=>{
+      if(!open){
+        const t=el('sg-tooltip');t.style.display='block';
+        setTimeout(()=>{if(!open)t.style.display='none';},8000);
+      }
+    },20000);
+    setTimeout(()=>{
+      if(!open){sessionStorage.setItem('sg_v','1');el('sg-tooltip').style.display='none';openChat();}
+    },35000);
   }
 
-  function init() {
-    inject();
-    el('sg-btn').addEventListener('click', () => open ? closeChat() : openChat());
-    el('sg-x').addEventListener('click', closeChat);
-    el('sg-go').addEventListener('click', send);
-    el('sg-ta').addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-    });
-    el('sg-ta').addEventListener('input', function() {
-      this.style.height = 'auto';
-      this.style.height = Math.min(this.scrollHeight, 80) + 'px';
-    });
+  function init(){
+    build();
+    el('sg-btn').addEventListener('click',()=>open?closeChat():openChat());
+    el('sg-x').addEventListener('click',closeChat);
+    el('sg-go').addEventListener('click',()=>send());
+    el('sg-tooltip').addEventListener('click',()=>openChat());
+    el('sg-ta').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
+    el('sg-ta').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px';});
     autoOpen();
   }
 
-  document.readyState === 'loading'
-    ? document.addEventListener('DOMContentLoaded', init)
-    : init();
+  document.readyState==='loading'?document.addEventListener('DOMContentLoaded',init):init();
 })();
