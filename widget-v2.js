@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const WORKER_URL = 'https://plain-bush-fa6chatbotfilmfy.gavreliuk54.workers.dev';
+  const WORKER_URL = 'https://bot.gavreliuk54.workers.dev';
   // Telegram тепер у Cloudflare Worker — ключі не видно в браузері
 
   function getUTM() {
