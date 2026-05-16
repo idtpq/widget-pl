@@ -137,7 +137,7 @@
 
   let open = false, busy = false, started = false;
   let hist = [];
-  let ses  = { name: null, contact: null, price: null, product: null, address: null, addressSent: false, total: null, paymentLinkSent: false, paymentUrl: null };
+  let ses  = { name: null, contact: null, phone: null, email: null, price: null, product: null, address: null, addressSent: false, total: null, paymentLinkSent: false, paymentUrl: null };
 
   function inject() {
     const s = document.createElement('style');
@@ -351,6 +351,8 @@
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name:         ses.name    || '',
+          phone:        ses.phone   || '',
+          email:        ses.email   || '',
           contact:      ses.contact || '',
           product:      ses.product || '',
           price:        ses.price   || '',
@@ -381,12 +383,16 @@
     busy = true; lock(true);
     addUser(text); showTyping();
 
-    const contact = getPhone(text) || getEmail(text);
+    const phone   = getPhone(text);
+    const email   = getEmail(text);
     const name    = getName(text);
     const addr    = getAddress(text);
-    if (contact && !ses.contact) ses.contact = contact;
-    if (name    && !ses.name)    ses.name    = name;
-    if (addr    && !ses.address) ses.address = addr;
+    if (phone && !ses.phone)   ses.phone   = phone;
+    if (email && !ses.email)   ses.email   = email;
+    // contact = перший знайдений (для зворотної сумісності)
+    if ((phone || email) && !ses.contact) ses.contact = phone || email;
+    if (name  && !ses.name)    ses.name    = name;
+    if (addr  && !ses.address) ses.address = addr;
 
     hist.push({ role: 'user', content: text });
 
@@ -420,8 +426,9 @@
 
       // Дебаунс 3 сек — скільки б даних не прийшло в одному/кількох повідомленнях,
       // відправляємо ОДИН раз після паузи
-      if (ses.contact && !ses.leadSent) {
+      if ((ses.phone || ses.email) && !ses.leadSent) {
         ses.leadSent = true;
+        ses.contact = ses.phone || ses.email; // оновлюємо contact
       }
       if (ses.leadSent) {
         if (ses._leadTimer) clearTimeout(ses._leadTimer);
