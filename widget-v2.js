@@ -137,7 +137,7 @@
 
   let open = false, busy = false, started = false;
   let hist = [];
-  let ses  = { name: null, contact: null, price: null, product: null, address: null, addressSent: false };
+  let ses  = { name: null, contact: null, price: null, product: null, address: null, addressSent: false, total: null, paymentLinkSent: false, paymentUrl: null };
 
   function inject() {
     const s = document.createElement('style');
@@ -287,11 +287,61 @@
   }
 
   // ── Telegram ────────────────────────────────────────────────────────────────
+  async function generatePaymentLink() {
+    try {
+      // Рахуємо total якщо ще не розраховано
+      const priceNum = parseFloat(ses.price) || 0;
+      const deliveryCost = priceNum >= 500 ? 0 : 18;
+      const total = ses.total || String(priceNum + deliveryCost);
+
+      const res = await fetch(WORKER_URL + '/payment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          product:    ses.product || 'Elastyczne szkło',
+          total:      total,
+          name:       ses.name    || '',
+          contact:    ses.contact || '',
+          session_id: Math.random().toString(36).slice(2),
+        }),
+      });
+      const data = await res.json();
+
+      if (data.ok && data.url) {
+        ses.paymentUrl = data.url;
+        // Показуємо кнопку оплати в чаті
+        showPaymentButton(data.url, total);
+      } else {
+        console.error('[SG] Payment link error:', data.error);
+      }
+    } catch(e) {
+      console.error('[SG] generatePaymentLink error:', e);
+    }
+  }
+
+  function showPaymentButton(url, total) {
+    const msgs = el('sg-log');
+    const div  = document.createElement('div');
+    div.style.cssText = 'display:flex;justify-content:center;padding:8px 0';
+    div.innerHTML = `
+      <a href="${url}" target="_blank" rel="noopener"
+         style="display:inline-flex;align-items:center;gap:8px;
+                background:#16a34a;color:#fff;text-decoration:none;
+                padding:12px 20px;border-radius:12px;font-size:15px;
+                font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.15)">
+        💳 Zapłać ${total} zł
+      </a>`;
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
   async function sendLead() {
     const utm = getUTM();
     const priceNum = parseFloat(ses.price) || 0;
     const delivery = priceNum >= 500 ? 'gratis' : '18';
-    const total    = priceNum >= 500 ? priceNum : priceNum + 18;
+    const totalNum = priceNum >= 500 ? priceNum : priceNum + 18;
+    ses.total = String(totalNum);
+    const total = totalNum;
     try {
       const r = await fetch(WORKER_URL + '/lead', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -353,6 +403,13 @@
       if (nameInBot && !ses.name)   ses.name    = nameInBot;
 
       addBot(reply); addTime();
+
+      // ── Генеруємо Stripe Payment Link при підтвердженні замовлення ────────
+      const isConfirmation = /przyjęłam zamówienie|link do płatności|razem:/i.test(reply);
+      if (isConfirmation && ses.contact && ses.total && !ses.paymentLinkSent) {
+        ses.paymentLinkSent = true;
+        generatePaymentLink();
+      }
 
       // Дебаунс 3 сек — скільки б даних не прийшло в одному/кількох повідомленнях,
       // відправляємо ОДИН раз після паузи
