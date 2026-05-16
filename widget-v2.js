@@ -289,17 +289,21 @@
   // ── Telegram ────────────────────────────────────────────────────────────────
   async function generatePaymentLink() {
     try {
-      // Рахуємо total якщо ще не розраховано
+      // Беремо total з сесії (вже розраховано в тригері)
       const priceNum = parseFloat(ses.price) || 0;
       const deliveryCost = priceNum >= 500 ? 0 : 18;
       const total = ses.total || String(priceNum + deliveryCost);
+      // Також пробуємо витягти "Razem: XXX zł" з останньої відповіді бота
+      const lastBotMsg = hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content || '';
+      const razemMatch = lastBotMsg.match(/[Rr]azem[:\s]+(\d+)\s*z/);
+      const finalTotal = razemMatch ? razemMatch[1] : total;
 
       const res = await fetch(WORKER_URL + '/payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           product:    ses.product || 'Elastyczne szkło',
-          total:      total,
+          total:      finalTotal,
           name:       ses.name    || '',
           contact:    ses.contact || '',
           session_id: Math.random().toString(36).slice(2),
@@ -310,7 +314,7 @@
       if (data.ok && data.url) {
         ses.paymentUrl = data.url;
         // Показуємо кнопку оплати в чаті
-        showPaymentButton(data.url, total);
+        showPaymentButton(data.url, finalTotal);
       } else {
         console.error('[SG] Payment link error:', data.error);
       }
@@ -398,16 +402,19 @@
       const price      = getPrice(reply);
       const product    = getProduct(text, reply);
       const nameInBot  = getNameFromBotReply(reply);
-      if (price)                    ses.price   = price;
-      if (product && !ses.product)  ses.product = product;
-      if (nameInBot && !ses.name)   ses.name    = nameInBot;
+      if (price)           ses.price   = price;
+      if (product)         ses.product = product;   // завжди оновлюємо — може додатись новий товар
+      if (nameInBot && !ses.name) ses.name = nameInBot;
 
       addBot(reply); addTime();
 
       // ── Генеруємо Stripe Payment Link при підтвердженні замовлення ────────
       const isConfirmation = /przyjęłam zamówienie|link do płatności|razem:/i.test(reply);
-      if (isConfirmation && ses.contact && ses.total && !ses.paymentLinkSent) {
+      if (isConfirmation && ses.contact && ses.price && !ses.paymentLinkSent) {
         ses.paymentLinkSent = true;
+        // Рахуємо total прямо тут
+        const pNum = parseFloat(ses.price) || 0;
+        ses.total = String(pNum >= 500 ? pNum : pNum + 18);
         generatePaymentLink();
       }
 
