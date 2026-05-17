@@ -252,6 +252,44 @@
   function getEmail(t){const m=t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:null;}
   // Слова які НЕ є іменами
   const NOT_NAMES = new Set(['chcę','mam','tak','nie','intensywnie','rzadziej','drewno','szkło','laminat','online','pobraniem','zamówienie','okrągły','prostokątny','mocniejsze','tańsze','oblicz','inne','jeszcze','czy','jak','jaki','jakie','które','gdzie','kiedy','proszę','dziękuję','świetnie','dobrze','rozumiem','oczywiście','pewnie']);
+  // Тексти кнопок / короткі відповіді, які не мають потрапляти в адресу
+  const ADDR_EXCLUDE = /^(?:🛒\s*)?Chcę zamówić$|^(?:❓\s*)?Mam pytanie$|^Drewno matowe$|^Szkło\s*\/\s*lakier\s*\/\s*połysk$|^Laminat$|^Intensywnie\s*\(kuchnia\/dzieci\)$|^Rzadziej\s*\(biurko\/salon\)$|^1\.5mm\s*—\s*tańsze$|^2mm\s*—\s*mocniejsze$|^Tak,\s*okrągły$|^Nie,\s*prostokątny$|^Tak,\s*mam jeszcze$|^Nie,\s*to wszystko$|^(?:💳\s*)?Online\s*\(karta\/BLIK\)$|^(?:🚚\s*)?Za pobraniem$/i;
+
+  function cleanMoney(v){
+    return String(v||'').replace(/\s+/g,'').replace(',', '.');
+  }
+
+  function getPrice(t){
+    // Найбезпечніше брати саме суму за товар, а не "Łącznie", щоб не додати доставку двічі
+    let m = t.match(/Razem\s+szk[łl]o[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    if(m) return cleanMoney(m[1]);
+
+    m = t.match(/Cena\s+produktu[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    if(m) return cleanMoney(m[1]);
+
+    const productLines = t.split('\n').filter(line =>
+      /cm|mm|okrąg|prostokąt|błyszczące|ryflowane/i.test(line) &&
+      /([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i.test(line) &&
+      !/dostawa|łącznie|razem/i.test(line)
+    );
+    if(productLines.length){
+      const mm = productLines[productLines.length-1].match(/([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+      if(mm) return cleanMoney(mm[1]);
+    }
+
+    return null;
+  }
+
+  function getProduct(t){
+    const lines = t.split('\n').map(l=>l.trim()).filter(Boolean);
+    const productLines = lines.filter(l =>
+      /^[-—]/.test(l) &&
+      /cm|mm|okrąg|prostokąt|błyszczące|ryflowane|wyprzedaż/i.test(l) &&
+      !/adres|dostawa|razem|łącznie|czas/i.test(l)
+    );
+    return productLines.length ? productLines.map(l=>l.replace(/^[-—]\s*/, '')).join(' | ') : null;
+  }
+
   function getName(t){
     const words = t.trim().split(/\s+/);
     // Тільки якщо перші два слова схожі на ім'я + прізвище
@@ -448,14 +486,18 @@
     }
 
     // Payment method change after stripe failure
-    if(ses.paymentLinkSent && !ses.paymentMethod !== 'cod' &&
+    if(ses.paymentLinkSent && ses.paymentMethod !== 'cod' &&
        /pobraniem|zmienić.*met|cod|za pobraniem/i.test(text)) {
       ses.paymentMethod = 'cod';
       const pNum = parseFloat(ses.price)||0;
       const total = pNum>=500?pNum:pNum+18;
       ses.total = String(total);
       showCOD(total);
-      sendLead();
+      if(ses.leadFired){
+        fireUpdate('зміна оплати на COD', {payment_method:'cod', total});
+      } else {
+        fireLead();
+      }
     }
 
     // Extract contacts
