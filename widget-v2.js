@@ -80,10 +80,10 @@
     name:null,phone:null,email:null,contact:null,circleSize:null,
     price:null,product:null,address:null,
     paymentMethod:null,total:null,stripeUrl:null,
-    // Стан відправки — кожен прапор встановлюється ОДИН РАЗ
-    leadFired:false,        // лід відправлено в TG
-    sessionSaved:false,     // сесія збережена в Sheets
+    // Стан відправки
+    leadFired:false,        // лід відправлено в TG один раз
     paymentLinkSent:false,  // Stripe link згенеровано
+    pendingAddressParts:[], // частини адреси, якщо клієнт пише її кількома повідомленнями
     _saveTimer:null,        // таймер для збереження сесії
   };
 
@@ -211,7 +211,7 @@
       clearQR();
       showCOD(t);
       // Зміна методу — окреме повідомлення, не новий лід
-      fireUpdate('зміна оплати на COD', {payment_method:'cod', total:t});
+      fireUpdate('payment_changed_to_cod', {payment_method:'cod', total:t});
     };
   }
   function showCOD(total){
@@ -237,14 +237,8 @@
   }
   function closeChat(){
     open=false;el('sg-box').classList.add('hidden');
-    // Зберігаємо сесію при закритті
-    if(hist.length>1&&!ses.sessionSaved){
-      ses.sessionSaved=true;
-      fetch(WORKER_URL+'/session',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(buildLeadData()),
-      }).catch(()=>{});
-    }
+    // Зберігаємо актуальну повну сесію при кожному закритті чату
+    saveSessionNow('close');
   }
 
   // Data extraction
@@ -254,6 +248,51 @@
   const NOT_NAMES = new Set(['chcę','mam','tak','nie','intensywnie','rzadziej','drewno','szkło','laminat','online','pobraniem','zamówienie','okrągły','prostokątny','mocniejsze','tańsze','oblicz','inne','jeszcze','czy','jak','jaki','jakie','które','gdzie','kiedy','proszę','dziękuję','świetnie','dobrze','rozumiem','oczywiście','pewnie']);
   // Тексти кнопок / короткі відповіді, які не мають потрапляти в адресу
   const ADDR_EXCLUDE = /^(?:🛒\s*)?Chcę zamówić$|^(?:❓\s*)?Mam pytanie$|^Drewno matowe$|^Szkło\s*\/\s*lakier\s*\/\s*połysk$|^Laminat$|^Intensywnie\s*\(kuchnia\/dzieci\)$|^Rzadziej\s*\(biurko\/salon\)$|^1\.5mm\s*—\s*tańsze$|^2mm\s*—\s*mocniejsze$|^Tak,\s*okrągły$|^Nie,\s*prostokątny$|^Tak,\s*mam jeszcze$|^Nie,\s*to wszystko$|^(?:💳\s*)?Online\s*\(karta\/BLIK\)$|^(?:🚚\s*)?Za pobraniem$/i;
+
+
+  function normalizeAddressPart(t){
+    return String(t||'')
+      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'')
+      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'')
+      .replace(/^[,;\s]+|[,;\s]+$/g,'')
+      .replace(/\s+/g,' ')
+      .trim();
+  }
+
+  function looksLikeAddressPart(t){
+    const v = String(t||'').trim();
+    if(!v || ADDR_EXCLUDE.test(v)) return false;
+    if(getEmail(v) && normalizeAddressPart(v).length < 3) return false;
+    if(/^[+\d\s-]{7,}$/.test(v)) return false; // сам номер телефону не є адресою
+    if(/\d{2,3}\s*[xX×]\s*\d{2,3}/.test(v)) return false; // розміри товару не є адресою
+    return /\d{2}-\d{3}|(ul\.?|ulica|al\.?|aleja)/i.test(v) || /\d/.test(v);
+  }
+
+  function rememberAddressPart(t){
+    const part = normalizeAddressPart(t);
+    if(!part || part.length < 3 || ADDR_EXCLUDE.test(part)) return;
+    if(!looksLikeAddressPart(part)) return;
+
+    if(!ses.pendingAddressParts.includes(part)){
+      ses.pendingAddressParts.push(part);
+    }
+
+    // Якщо адреса приходить частинами: вулиця окремо, місто+індекс окремо — склеюємо все в одну адресу
+    ses.address = ses.pendingAddressParts.join(', ');
+  }
+
+  function getAddressFromBot(t){
+    const m = String(t||'').match(/Adres:\s*([\s\S]*?)(?:\n\s*\n|Link do płatności|Skontaktujemy|$)/i);
+    if(!m) return null;
+    const addr = m[1]
+      .split('\n')
+      .map(x=>x.trim())
+      .filter(Boolean)
+      .join(', ')
+      .replace(/^[,;\s]+|[,;\s]+$/g,'')
+      .trim();
+    return addr || null;
+  }
 
   function cleanMoney(v){
     return String(v||'').replace(/\s+/g,'').replace(',', '.');
@@ -308,22 +347,38 @@
     return m?m[1]:null;
   }
     function getAddress(t){
-    // Виключаємо тексти кнопок і продуктів
-    if(ADDR_EXCLUDE.test(t.trim()))return null;
-    // Потрібно щоб повідомлення містило email або телефон — тоді решта = адреса
-    const hasContact=/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/.test(t)||/(\+48)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/.test(t);
-    // Польський індекс — надійний сигнал
-    if(/\d{2}-\d{3}/.test(t)){
-      let c=t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'').replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'').replace(/^[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+/,'').replace(/[,\s]+$/,'').replace(/^[,\s]+/,'').trim();
-      return c||t.trim();
+    const raw = String(t||'').trim();
+    if(!raw || ADDR_EXCLUDE.test(raw)) return null;
+
+    const withoutContact = normalizeAddressPart(raw);
+
+    // Польський індекс — сильний сигнал адреси / міста
+    if(/\d{2}-\d{3}/.test(raw)){
+      rememberAddressPart(withoutContact || raw);
+      return ses.address || withoutContact || raw;
     }
-    if(/ul\.|ulica|al\.|aleja/i.test(t))return t.trim();
-    if(/\b(warszawa|kraków|gdańsk|wrocław|poznań|łódź|katowice|lublin|białystok|szczecin|rzeszów|gdynia|bydgoszcz|toruń|olsztyn)\b/i.test(t))return t.trim();
-    // Якщо є контакт і залишився текст — берем як адресу
-    if(hasContact){
-      let c=t.replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'').replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'').replace(/^[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+/,'').replace(/[,\s]+$/,'').replace(/^[,\s]+/,'').trim();
-      if(c&&c.length>3&&!ADDR_EXCLUDE.test(c))return c;
+
+    // Стандартні маркери адреси
+    if(/(ul\.?|ulica|al\.?|aleja)/i.test(raw)){
+      rememberAddressPart(withoutContact || raw);
+      return ses.address || withoutContact || raw;
     }
+
+    // Якщо бот просив адресу, а клієнт написав частину з цифрою — це теж частина адреси
+    const lastBot = hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content || '';
+    const botAskedAddress = /adres|ulica|miasto|kod pocztowy|dane do wysyłki|dostawy/i.test(lastBot);
+    if(botAskedAddress && looksLikeAddressPart(raw)){
+      rememberAddressPart(withoutContact || raw);
+      return ses.address || withoutContact || raw;
+    }
+
+    // Якщо контакт і адреса прийшли одним повідомленням — забираємо контакт, решту беремо як адресу
+    const hasContact = getEmail(raw) || getPhone(raw);
+    if(hasContact && withoutContact && withoutContact.length > 3 && !ADDR_EXCLUDE.test(withoutContact)){
+      rememberAddressPart(withoutContact);
+      return ses.address || withoutContact;
+    }
+
     return null;
   }
   function getNameFromBot(t){const m=t.match(/Dziękuję[,!\s]+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})/);return m?m[1]:null;}
@@ -407,29 +462,35 @@
     }catch(e){console.error('[SG] Update error:',e);}
   }
 
-  // Зберегти сесію в Sheets (без TG) — при закритті чату або таймауту
-  function scheduleSessionSave(){
+  // Зберегти повну сесію в Sheets (без TG).
+  // ВАЖЛИВО: без прапора sessionSaved, щоб у таблицю зберігався актуальний full_chat після кожного етапу.
+  async function saveSessionNow(reason='message'){
+    if(!hist.length) return;
+    try{
+      await fetch(WORKER_URL+'/session',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(buildLeadData({save_reason:reason})),
+      });
+      console.log('[SG] Session saved:', reason, SID);
+    }catch(e){
+      console.error('[SG] Session save error:', e);
+    }
+  }
+
+  function scheduleSessionSave(reason='message'){
     if(ses._saveTimer)clearTimeout(ses._saveTimer);
-    ses._saveTimer=setTimeout(async()=>{
-      if(ses.sessionSaved)return;
-      ses.sessionSaved=true;
-      try{
-        await fetch(WORKER_URL+'/session',{
-          method:'POST',headers:{'Content-Type':'application/json'},
-          body:JSON.stringify(buildLeadData()),
-        });
-      }catch(e){}
-    },30000); // зберігаємо через 30 сек після останнього повідомлення
+    ses._saveTimer=setTimeout(()=>saveSessionNow(reason),2000);
   }
 
   async function sendLeadWithStripe(stripeUrl){
     ses.stripeUrl=stripeUrl;
     if(ses.leadFired){
       // Лід вже був — відправляємо лише оновлення з посиланням
-      await fireUpdate('оплата',{stripe_url:stripeUrl,payment_method:'stripe'});
+      await fireUpdate('payment_link',{stripe_url:stripeUrl,payment_method:'stripe'});
     } else {
       await fireLead();
     }
+    await saveSessionNow('stripe_link_sent');
   }
 
     async function generateStripe(){
@@ -485,7 +546,7 @@
       }
     }
 
-    // Payment method change after stripe failure
+    // Payment method change after stripe/payment step
     if(ses.paymentLinkSent && ses.paymentMethod !== 'cod' &&
        /pobraniem|zmienić.*met|cod|za pobraniem/i.test(text)) {
       ses.paymentMethod = 'cod';
@@ -494,10 +555,13 @@
       ses.total = String(total);
       showCOD(total);
       if(ses.leadFired){
-        fireUpdate('зміна оплати на COD', {payment_method:'cod', total});
+        await fireUpdate('payment_changed_to_cod', {payment_method:'cod', total});
       } else {
-        fireLead();
+        await fireLead();
       }
+      await saveSessionNow('payment_changed_to_cod');
+      busy=false;lock(false);el('sg-ta').focus();
+      return;
     }
 
     // Extract contacts
@@ -505,10 +569,11 @@
     if(phone&&!ses.phone)ses.phone=phone;
     if(email&&!ses.email)ses.email=email;
     if(name&&!ses.name)ses.name=name;
-    if(addr&&!ses.address)ses.address=addr;
+    if(addr)ses.address=addr;
     if((phone||email)&&!ses.contact)ses.contact=phone||email;
 
     hist.push({role:'user',content:text});
+    scheduleSessionSave('user_message');
 
     try{
       const res=await fetch(WORKER_URL,{
@@ -519,15 +584,16 @@
       const reply=data.content?.[0]?.text||'Przepraszamy, spróbuj ponownie.';
       hist.push({role:'assistant',content:reply});
 
-      const price=getPrice(reply),product=getProduct(reply),nameBot=getNameFromBot(reply);
+      const price=getPrice(reply),product=getProduct(reply),nameBot=getNameFromBot(reply),addrBot=getAddressFromBot(reply);
       if(price)ses.price=price;
       if(product)ses.product=product;
       if(nameBot&&!ses.name)ses.name=nameBot;
+      if(addrBot)ses.address=addrBot;
 
       addBot(reply);addTime();detectQR(reply);
 
-      // Зберігаємо сесію в Sheets при кожному повідомленні (дебаунс 30с)
-      scheduleSessionSave();
+      // Зберігаємо повний чат у Sheets після кожної відповіді бота
+      await saveSessionNow('bot_reply');
 
       // Лід в TG — ОДИН РАЗ, тільки коли є і контакт і підтвердження замовлення
       const isConfirm=/przyjęłam zamówienie|pojawi się za chwilę|łącznie|razem:/i.test(reply);
@@ -545,6 +611,7 @@
     }catch(e){
       el('sg-log').querySelector('.sg-typing')?.remove();
       addBot('Brak połączenia. Proszę odświeżyć stronę.');
+      await saveSessionNow('error_after_user_message');
     }finally{
       busy=false;lock(false);el('sg-ta').focus();
     }
