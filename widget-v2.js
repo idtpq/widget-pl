@@ -79,9 +79,12 @@
   let ses={
     name:null,phone:null,email:null,contact:null,circleSize:null,
     price:null,product:null,address:null,
-    paymentMethod:null,total:null,
-    leadSent:false,addressSent:false,paymentLinkSent:false,
-    _leadTimer:null,
+    paymentMethod:null,total:null,stripeUrl:null,
+    // Стан відправки — кожен прапор встановлюється ОДИН РАЗ
+    leadFired:false,        // лід відправлено в TG
+    sessionSaved:false,     // сесія збережена в Sheets
+    paymentLinkSent:false,  // Stripe link згенеровано
+    _saveTimer:null,        // таймер для збереження сесії
   };
 
   function build(){
@@ -207,19 +210,8 @@
       ses.paymentMethod = 'cod';
       clearQR();
       showCOD(t);
-      // Відправляємо повідомлення про зміну методу
-      fetch(WORKER_URL+'/lead',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          session_id:SID,name:ses.name||'',phone:ses.phone||'',email:ses.email||'',
-          contact:ses.contact||'',product:ses.product||'',
-          product_formatted:formatProductForTG(),
-          price:ses.price||'',delivery:parseFloat(ses.price)>=500?'gratis':'18',
-          total:t,address:ses.address||'',
-          payment_method:'cod',is_method_change:true,
-          summary:buildSummary(),full_chat:buildFullChat(),
-        }),
-      }).catch(e=>console.error(e));
+      // Зміна методу — окреме повідомлення, не новий лід
+      fireUpdate('зміна оплати на COD', {payment_method:'cod', total:t});
     };
   }
   function showCOD(total){
@@ -243,54 +235,41 @@
     }
     el('sg-ta').focus();
   }
-  function closeChat(){open=false;el('sg-box').classList.add('hidden');}
+  function closeChat(){
+    open=false;el('sg-box').classList.add('hidden');
+    // Зберігаємо сесію при закритті
+    if(hist.length>1&&!ses.sessionSaved){
+      ses.sessionSaved=true;
+      fetch(WORKER_URL+'/session',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(buildLeadData()),
+      }).catch(()=>{});
+    }
+  }
 
   // Data extraction
   function getPhone(t){const m=t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);return m?m[0].replace(/[\s-]/g,''):null;}
   function getEmail(t){const m=t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:null;}
-  // Слова які НЕ є іменами (кнопки, фрази)
-  const NOT_NAMES = ['chcę zamówić','mam pytanie','intensywnie','rzadziej','drewno','szkło','laminat','online','pobraniem','tak,','nie,','okrągły','prostokątny','zamówienie','jedno','osobne','mocniejsze','tańsze','oblicz'];
+  // Слова які НЕ є іменами
+  const NOT_NAMES = new Set(['chcę','mam','tak','nie','intensywnie','rzadziej','drewno','szkło','laminat','online','pobraniem','zamówienie','okrągły','prostokątny','mocniejsze','tańsze','oblicz','inne','jeszcze','czy','jak','jaki','jakie','które','gdzie','kiedy','proszę','dziękuję','świetnie','dobrze','rozumiem','oczywiście','pewnie']);
   function getName(t){
-    const tl = t.toLowerCase();
-    // Перевіряємо що це не текст кнопки
-    if(NOT_NAMES.some(w=>tl.startsWith(w)||tl===w))return null;
-    // Мінімум 2 слова, кожне 2+ букв, тільки літери (не цифри, не спецсимволи)
-    const m=t.match(/^([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{1,}|[a-zżźćąśęłóńA-ZŻŹĆĄŚĘŁÓŃ]{2,})\s+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{1,}|[a-z]{2,})(?=[,\s]|$)/);
-    if(m&&!m[0].match(/\d/)&&m[0].length>4)return m[0];
-    const m2=t.match(/(?:jestem|nazywam się|imię:\s*)([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+(?:\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+)?)/i);
-    return m2?m2[1]:null;
-  }
-  function getPrice(t){const all=[...t.matchAll(/(\d+)\s*zł/g)];return all.length?all[all.length-1][1]:null;}
-  function getProduct(botText){
-    // Спочатку шукаємо в підтверджуючому повідомленні
-    const list=[...botText.matchAll(/[-–]\s*((?:[Bb]\u0142yszcz\u0105ce|[Rr]yflowane|[Ww]yprzeda\u017c)[^\n]*)/g)];
-    let product=null;
-    if(list.length>0){
-      product=list.map(m=>m[0].replace(/^[-–]\s*/,'').trim()).join(' | ');
-      // Якщо в продукті немає розмірів — додаємо з історії
-      if(!/\d{2,3}/.test(product)){
-        const allDims=getAllDims();
-        if(allDims)product=product+', '+allDims;
+    const words = t.trim().split(/\s+/);
+    // Тільки якщо перші два слова схожі на ім'я + прізвище
+    if(words.length >= 2){
+      const w1 = words[0].replace(/[,;]/g,'');
+      const w2 = words[1].replace(/[,;]/g,'');
+      // Має бути мінімум 2 літери, без цифр, не в списку заборонених
+      if(w1.length>=2 && w2.length>=2 && !/\d/.test(w1+w2) &&
+         !NOT_NAMES.has(w1.toLowerCase()) && !NOT_NAMES.has(w2.toLowerCase()) &&
+         !/mm|cm|zł|@/.test(w1+w2)){
+        return w1+' '+w2;
       }
-    } else{
-      const all=hist.map(m=>m.content).join(' ');
-      const allDims=[...all.matchAll(/(\d{2,3})\s*[xX×]\s*(\d{2,3})\s*cm/g)];
-      const dims=[...new Set(allDims.map(m=>{
-        if(ses.circleSize&&m[1]===ses.circleSize&&m[2]===ses.circleSize)return 'okrąg ⌀'+m[1]+' cm';
-        return m[1]+'×'+m[2]+' cm';
-      }))];
-      const thick=all.match(/[Bb]\u0142yszcz\u0105ce\s*([0-9.]+)mm|[Rr]yflowane\s*([0-9.]+)mm/);
-      product=[thick?thick[0]:'',...dims].filter(Boolean).join(', ')||null;
     }
-    if(product&&ses.circleSize){
-      product=product.replace(ses.circleSize+'×'+ses.circleSize+' cm','okrąg ⌀'+ses.circleSize+' cm');
-      product=product.replace(ses.circleSize+'x'+ses.circleSize+' cm','okrąg ⌀'+ses.circleSize+' cm');
-    }
-    return product;
+    // Fallback: "jestem/nazywam się X"
+    const m=t.match(/(?:jestem|nazywam się|imię:\s*)([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+(?:\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+)?)/i);
+    return m?m[1]:null;
   }
-
-  const ADDR_EXCLUDE = /^(\d+mm|\d+\s*[xX]|błyszcz|ryflowane|wyprzedaż|mocniejsz|tańsze|online|pobraniem|intensywnie|rzadziej|drewno|szkło|laminat|tak,|nie,|okrągły|zamawiam|mam pytanie|chcę)/i;
-  function getAddress(t){
+    function getAddress(t){
     // Виключаємо тексти кнопок і продуктів
     if(ADDR_EXCLUDE.test(t.trim()))return null;
     // Потрібно щоб повідомлення містило email або телефон — тоді решта = адреса
@@ -324,62 +303,98 @@
 
   function formatProductForTG(){
     if(!ses.product) return 'уточнюється';
-    // Split by | and format each line
-    return ses.product.split('|').map(p => {
-      p = p.trim();
-      // Detect circle
-      if(p.includes('okrąg') || p.includes('⌀')) return '⭕ ' + p;
-      return '▪️ ' + p;
+    // Extract product lines from bot confirmation or build from history
+    const lines = ses.product.split('|').map(p => p.trim()).filter(Boolean);
+    return lines.map(p => {
+      const isCircle = p.includes('okrąg') || p.includes('⌀');
+      const icon = isCircle ? '⭕' : '▪️';
+      // Add (×1) if no quantity mentioned
+      const hasQty = /×\d+|x\d+|\d+\s*szt/.test(p);
+      return icon + ' ' + p + (hasQty ? '' : ' (×1)');
     }).join('\n');
   }
 
-  async function sendLeadWithStripe(stripeUrl){
-    const utm=getUTM(),u=[utm.source,utm.medium,utm.campaign].filter(Boolean).join(' / ')||'прямий';
+  // Формуємо дані для передачі
+  function buildLeadData(extra={}){
+    const utm=getUTM();
     const pNum=parseFloat(ses.price)||0;
     const delivery=pNum>=500?'gratis':'18';
     const total=pNum>0?(pNum>=500?pNum:pNum+18):0;
-    try{
-      await fetch(WORKER_URL+'/lead',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          session_id:SID,name:ses.name||'',phone:ses.phone||'',email:ses.email||'',
-          contact:ses.contact||'',product:ses.product||'',
-          product_formatted:formatProductForTG(),
-          price:ses.price||'',delivery,total:total||'',
-          address:ses.address||'',payment_method:'stripe',
-          stripe_url:stripeUrl,
-          summary:buildSummary(),full_chat:buildFullChat(),
-          utm_source:utm.source,utm_medium:utm.medium,utm_campaign:utm.campaign,
-        }),
-      });
-      console.log('[SG] Lead+Stripe sent');
-    }catch(e){console.error('[SG] LeadStripe error:',e);}
+    if(total>0)ses.total=String(total);
+    return{
+      session_id:SID,
+      name:ses.name||'',
+      phone:ses.phone||'',
+      email:ses.email||'',
+      contact:ses.contact||'',
+      product:ses.product||'',
+      product_formatted:formatProductForTG(),
+      price:ses.price||'',
+      delivery,
+      total:ses.total||'',
+      address:ses.address||'',
+      payment_method:ses.paymentMethod||'',
+      stripe_url:ses.stripeUrl||'',
+      summary:buildSummary(),
+      full_chat:buildFullChat(),
+      utm_source:utm.source,
+      utm_medium:utm.medium,
+      utm_campaign:utm.campaign,
+      ...extra,
+    };
   }
 
-  async function sendLead(){
-    const utm=getUTM(),u=[utm.source,utm.medium,utm.campaign].filter(Boolean).join(' / ')||'прямий';
-    const pNum=parseFloat(ses.price)||0;
-    const delivery=pNum>=500?'gratis':'18';
-    const total=pNum>0?(pNum>=500?pNum:pNum+18):0;
-    ses.total=total>0?String(total):'';
+  // Відправити лід в TG — ТІЛЬКИ ОДИН РАЗ за сесію
+  async function fireLead(){
+    if(ses.leadFired)return;
+    if(!ses.phone&&!ses.email)return; // без контакту не відправляємо
+    ses.leadFired=true;
     try{
       await fetch(WORKER_URL+'/lead',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          session_id:SID,name:ses.name||'',phone:ses.phone||'',email:ses.email||'',
-          contact:ses.contact||'',product:ses.product||'',price:ses.price||'',
-          product_formatted: formatProductForTG(),
-          delivery,total:ses.total,address:ses.address||'',
-          payment_method:ses.paymentMethod||'не вказано',
-          summary:buildSummary(),full_chat:buildFullChat(),
-          utm_source:utm.source,utm_medium:utm.medium,utm_campaign:utm.campaign,
-        }),
+        body:JSON.stringify(buildLeadData()),
       });
-      console.log('[SG] Lead sent');
+      console.log('[SG] Lead fired once, ID:',SID);
     }catch(e){console.error('[SG] Lead error:',e);}
   }
 
-  async function generateStripe(){
+  // Відправити зміну замовлення (НЕ новий лід)
+  async function fireUpdate(changeType, extra={}){
+    try{
+      await fetch(WORKER_URL+'/update',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({...buildLeadData(),...extra,change_type:changeType}),
+      });
+      console.log('[SG] Update fired:',changeType);
+    }catch(e){console.error('[SG] Update error:',e);}
+  }
+
+  // Зберегти сесію в Sheets (без TG) — при закритті чату або таймауту
+  function scheduleSessionSave(){
+    if(ses._saveTimer)clearTimeout(ses._saveTimer);
+    ses._saveTimer=setTimeout(async()=>{
+      if(ses.sessionSaved)return;
+      ses.sessionSaved=true;
+      try{
+        await fetch(WORKER_URL+'/session',{
+          method:'POST',headers:{'Content-Type':'application/json'},
+          body:JSON.stringify(buildLeadData()),
+        });
+      }catch(e){}
+    },30000); // зберігаємо через 30 сек після останнього повідомлення
+  }
+
+  async function sendLeadWithStripe(stripeUrl){
+    ses.stripeUrl=stripeUrl;
+    if(ses.leadFired){
+      // Лід вже був — відправляємо лише оновлення з посиланням
+      await fireUpdate('оплата',{stripe_url:stripeUrl,payment_method:'stripe'});
+    } else {
+      await fireLead();
+    }
+  }
+
+    async function generateStripe(){
     try{
       const lastBot=hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content||'';
       const rm=lastBot.match(/[Łł][ąa]cznie[:\s]+(\d+)|[Rr]azem[:\s]+(\d+)/);
@@ -398,10 +413,7 @@
       const d=await res.json();
       if(d.ok&&d.url){
         showPayBtn(d.url,finalTotal);
-        // Відправляємо лід з Stripe URL
-        if(ses._leadTimer)clearTimeout(ses._leadTimer);
-        ses.stripeUrl = d.url;
-        sendLeadWithStripe(d.url);
+        await sendLeadWithStripe(d.url); // один раз, з посиланням
       } else{
         console.error('[SG] Stripe:',d.error);
         addBot('Problem z płatnością online. Proszę skontaktować się: +48 45 104 05 40');
@@ -472,25 +484,20 @@
 
       addBot(reply);addTime();detectQR(reply);
 
-      // Lead debounce
-      if(ses.contact&&!ses.leadSent)ses.leadSent=true;
-      if(ses.address&&!ses.addressSent)ses.addressSent=true;
-      if(ses.leadSent){
-        if(ses._leadTimer)clearTimeout(ses._leadTimer);
-        ses._leadTimer=setTimeout(()=>{ses._leadTimer=null;sendLead();},3000);
-      }
+      // Зберігаємо сесію в Sheets при кожному повідомленні (дебаунс 30с)
+      scheduleSessionSave();
 
-      // Payment trigger
+      // Лід в TG — ОДИН РАЗ, тільки коли є і контакт і підтвердження замовлення
       const isConfirm=/przyjęłam zamówienie|pojawi się za chwilę|łącznie|razem:/i.test(reply);
-      if(isConfirm&&ses.contact&&!ses.paymentLinkSent){
+      if(isConfirm && (ses.phone||ses.email) && !ses.paymentLinkSent){
         ses.paymentLinkSent=true;
         if(ses.paymentMethod==='cod'){
           const pNum=parseFloat(ses.price)||0;
-          showCOD(pNum>=500?pNum:pNum+18);
-          if(ses._leadTimer)clearTimeout(ses._leadTimer);
-          sendLead();
+          const total=pNum>=500?pNum:pNum+18;
+          showCOD(total);
+          fireLead(); // один раз
         } else {
-          generateStripe();
+          generateStripe(); // fireLead викликається всередині
         }
       }
     }catch(e){
