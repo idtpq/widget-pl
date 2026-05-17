@@ -84,7 +84,8 @@
     leadFired:false,        // лід відправлено в TG один раз
     paymentLinkSent:false,  // Stripe link згенеровано
     pendingAddressParts:[], // частини адреси, якщо клієнт пише її кількома повідомленнями
-    _saveTimer:null,        // таймер для збереження сесії
+    sessionSavedOnce:false, // чи вже була створена/оновлена сесія в Sheets
+    _saveTimer:null,        // таймер для відкладеного збереження сесії
   };
 
   function build(){
@@ -212,6 +213,7 @@
       showCOD(t);
       // Зміна методу — окреме повідомлення, не новий лід
       fireUpdate('payment_changed_to_cod', {payment_method:'cod', total:t});
+      savePostPaymentUpdate('payment_changed_to_cod_button');
     };
   }
   function showCOD(total){
@@ -237,8 +239,11 @@
   }
   function closeChat(){
     open=false;el('sg-box').classList.add('hidden');
-    // Зберігаємо актуальну повну сесію при кожному закритті чату
-    saveSessionNow('close');
+    // Якщо клієнт не залишив контакт і закрив чат — зберігаємо покинутий діалог без очікування.
+    // Якщо контакт уже є — не дублюємо Google Sheets, лід піде окремо після підтвердження замовлення.
+    if(!hasContactData() && hist.length > 1){
+      saveSessionNow('close_no_contact');
+    }
   }
 
   // Data extraction
@@ -265,7 +270,7 @@
     if(getEmail(v) && normalizeAddressPart(v).length < 3) return false;
     if(/^[+\d\s-]{7,}$/.test(v)) return false; // сам номер телефону не є адресою
     if(/\d{2,3}\s*[xX×]\s*\d{2,3}/.test(v)) return false; // розміри товару не є адресою
-    return /\d{2}-\d{3}|(ul\.?|ulica|al\.?|aleja)/i.test(v) || /\d/.test(v);
+    return /\d{2}-\d{3}|\b(ul\.?|ulica|al\.?|aleja)\b/i.test(v) || /\d/.test(v);
   }
 
   function rememberAddressPart(t){
@@ -359,7 +364,7 @@
     }
 
     // Стандартні маркери адреси
-    if(/(ul\.?|ulica|al\.?|aleja)/i.test(raw)){
+    if(/\b(ul\.?|ulica|al\.?|aleja)\b/i.test(raw)){
       rememberAddressPart(withoutContact || raw);
       return ses.address || withoutContact || raw;
     }
@@ -462,24 +467,51 @@
     }catch(e){console.error('[SG] Update error:',e);}
   }
 
-  // Зберегти повну сесію в Sheets (без TG).
-  // ВАЖЛИВО: без прапора sessionSaved, щоб у таблицю зберігався актуальний full_chat після кожного етапу.
-  async function saveSessionNow(reason='message'){
+  function hasContactData(){
+    return !!(ses.phone || ses.email || ses.contact);
+  }
+
+  function clearSessionTimer(){
+    if(ses._saveTimer){
+      clearTimeout(ses._saveTimer);
+      ses._saveTimer = null;
+    }
+  }
+
+  // Зберегти сесію в Sheets без Telegram.
+  // Тепер це НЕ викликається після кожного повідомлення.
+  // 1) До контакту: тільки якщо клієнт мовчить 60 секунд або закрив чат.
+  // 2) Після вибору оплати: тільки якщо клієнт уже після цього щось змінює/пише.
+  async function saveSessionNow(reason='session'){
     if(!hist.length) return;
     try{
       await fetch(WORKER_URL+'/session',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(buildLeadData({save_reason:reason})),
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(buildLeadData({
+          save_reason: reason,
+          sheet_action: 'upsert_by_session_id',
+          session_saved_before: ses.sessionSavedOnce ? 'yes' : 'no'
+        })),
       });
+      ses.sessionSavedOnce = true;
       console.log('[SG] Session saved:', reason, SID);
     }catch(e){
       console.error('[SG] Session save error:', e);
     }
   }
 
-  function scheduleSessionSave(reason='message'){
-    if(ses._saveTimer)clearTimeout(ses._saveTimer);
-    ses._saveTimer=setTimeout(()=>saveSessionNow(reason),2000);
+  function scheduleSessionSave(reason='idle_no_contact'){
+    clearSessionTimer();
+    if(hasContactData()) return;
+    ses._saveTimer = setTimeout(()=>{
+      if(!hasContactData()) saveSessionNow(reason);
+    },60000);
+  }
+
+  function savePostPaymentUpdate(reason='post_payment_update'){
+    if(!ses.paymentLinkSent) return;
+    saveSessionNow(reason);
   }
 
   async function sendLeadWithStripe(stripeUrl){
@@ -490,7 +522,7 @@
     } else {
       await fireLead();
     }
-    await saveSessionNow('stripe_link_sent');
+    // /lead у Worker вже записує повний чат у Sheets, тому окремий /session тут не дублюємо.
   }
 
     async function generateStripe(){
@@ -526,6 +558,7 @@
     if(!text||busy)return;
     if(!quickText){ta.value='';ta.style.height='auto';}
     busy=true;lock(true);
+    clearSessionTimer();
     addUser(text);showTyping();
 
     // Payment method detection
@@ -559,7 +592,7 @@
       } else {
         await fireLead();
       }
-      await saveSessionNow('payment_changed_to_cod');
+      savePostPaymentUpdate('payment_changed_to_cod');
       busy=false;lock(false);el('sg-ta').focus();
       return;
     }
@@ -573,7 +606,14 @@
     if((phone||email)&&!ses.contact)ses.contact=phone||email;
 
     hist.push({role:'user',content:text});
-    scheduleSessionSave('user_message');
+
+    // Не пишемо кожне повідомлення в Google Sheets.
+    // До контакту — ставимо таймер 60 секунд. Після оплати — оновлюємо тільки якщо клієнт пише/змінює щось уже після вибору методу оплати.
+    if(!hasContactData()){
+      scheduleSessionSave('idle_no_contact_after_user');
+    } else if(ses.paymentLinkSent){
+      savePostPaymentUpdate('post_payment_user_message');
+    }
 
     try{
       const res=await fetch(WORKER_URL,{
@@ -592,8 +632,14 @@
 
       addBot(reply);addTime();detectQR(reply);
 
-      // Зберігаємо повний чат у Sheets після кожної відповіді бота
-      await saveSessionNow('bot_reply');
+      // Не дублюємо Sheets після кожної відповіді.
+      // До контакту — оновимо сесію лише після 60 секунд тиші.
+      // Після оплати — оновимо існуючий ID, якщо клієнт уже після оплати продовжив діалог.
+      if(!hasContactData()){
+        scheduleSessionSave('idle_no_contact_after_bot');
+      } else if(ses.paymentLinkSent){
+        savePostPaymentUpdate('post_payment_bot_reply');
+      }
 
       // Лід в TG — ОДИН РАЗ, тільки коли є і контакт і підтвердження замовлення
       const isConfirm=/przyjęłam zamówienie|pojawi się za chwilę|łącznie|razem:/i.test(reply);
@@ -611,7 +657,8 @@
     }catch(e){
       el('sg-log').querySelector('.sg-typing')?.remove();
       addBot('Brak połączenia. Proszę odświeżyć stronę.');
-      await saveSessionNow('error_after_user_message');
+      if(!hasContactData()) scheduleSessionSave('idle_error_no_contact');
+      else if(ses.paymentLinkSent) savePostPaymentUpdate('post_payment_error');
     }finally{
       busy=false;lock(false);el('sg-ta').focus();
     }
