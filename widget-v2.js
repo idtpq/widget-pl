@@ -534,15 +534,22 @@
       const fromBot=rm?parseInt(rm[1]||rm[2]):0;
       const finalTotal=ses.total||(fromBot>0?String(fromBot):String(pNum+delivery));
       console.log('[SG] Stripe total:',finalTotal);
+      const paymentPayload = buildLeadData({
+        product: ses.product || 'Elastyczne szkło',
+        product_formatted: formatProductForTG(),
+        total: finalTotal,
+        payment_method: 'stripe',
+        contact: ses.email || ses.phone || ses.contact || '',
+      });
+
       const res=await fetch(WORKER_URL+'/payment',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({
-          product:ses.product||'Elastyczne szkło',total:finalTotal,
-          name:ses.name||'',contact:ses.email||ses.phone||ses.contact||'',session_id:SID,
-        }),
+        body:JSON.stringify(paymentPayload),
       });
       const d=await res.json();
       if(d.ok&&d.url){
+        ses.stripeUrl = d.url;
+        ses.stripeSessionId = d.session_id || '';
         showPayBtn(d.url,finalTotal);
         await sendLeadWithStripe(d.url); // один раз, з посиланням
       } else{
