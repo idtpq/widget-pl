@@ -1,7 +1,7 @@
 (function () {
   'use strict';
 
-  const WORKER_URL = 'https://bot.gavreliuk54.workers.dev';
+  const WORKER_URL = 'https://bot.metsukisutemi.workers.dev';
 
   function getUTM() {
     return {
