@@ -79,7 +79,7 @@
   let ses={
     name:null,phone:null,email:null,contact:null,circleSize:null,
     price:null,product:null,address:null,
-    paymentMethod:null,total:null,stripeUrl:null,
+    paymentMethod:null,total:null,delivery:null,stripeUrl:null,
     // Стан відправки
     leadFired:false,        // лід відправлено в TG один раз
     paymentLinkSent:false,  // Stripe link згенеровано
@@ -303,53 +303,121 @@
     return String(v||'').replace(/\s+/g,'').replace(',', '.');
   }
 
-  function getPrice(t){
-    // Найбезпечніше брати саме суму за товар, а не "Łącznie", щоб не додати доставку двічі
-    let m = t.match(/Razem\s+szk[łl]o[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
-    if(m) return cleanMoney(m[1]);
+  function getMoneyValuesFromLine(line){
+    return [...String(line||'').matchAll(/([\d\s]+(?:[,.]\d+)?)\s*z[łl]/gi)]
+      .map(m => parseFloat(cleanMoney(m[1])))
+      .filter(n => Number.isFinite(n));
+  }
 
-    m = t.match(/Cena\s+produktu[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
-    if(m) return cleanMoney(m[1]);
+  function isProductLine(line){
+    const l = String(line||'').trim();
+    if(!/^[-—•▪■]/.test(l)) return false;
+    if(/dostawa|łącznie|razem|czas|adres|link|płatno|opłata/i.test(l)) return false;
+    return /\d{2,4}\s*[xX×х]\s*\d{2,4}|okr[ąa]g|prostok[ąa]t|kwadrat|średnica|śr\.|cm|mm|błyszczące|ryflowane|wyprzedaż/i.test(l)
+      && /z[łl]/i.test(l);
+  }
 
-    const productLines = t.split('\n').filter(line =>
-      /cm|mm|okrąg|prostokąt|błyszczące|ryflowane/i.test(line) &&
-      /([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i.test(line) &&
-      !/dostawa|łącznie|razem/i.test(line)
-    );
-    if(productLines.length){
-      const mm = productLines[productLines.length-1].match(/([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
-      if(mm) return cleanMoney(mm[1]);
+  function getProductLines(t){
+    return String(t||'')
+      .split('\n')
+      .map(l => l.trim())
+      .filter(isProductLine);
+  }
+
+  function sumProductLines(t){
+    const lines = getProductLines(t);
+    let sum = 0;
+    for(const line of lines){
+      const vals = getMoneyValuesFromLine(line);
+      if(vals.length) sum += vals[vals.length - 1]; // якщо є "70 zł × 2 szt = 140 zł" беремо 140, а не 70
     }
+    return sum > 0 ? String(Math.round(sum * 100) / 100).replace('.00','') : null;
+  }
+
+  function getPrice(t){
+    // 1) Найкраще джерело — "Razem szkło", якщо бот його написав
+    let m = String(t||'').match(/Razem\s+szk[łl]o[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    if(m) return cleanMoney(m[1]);
+
+    m = String(t||'').match(/Cena\s+towaru[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    if(m) return cleanMoney(m[1]);
+
+    m = String(t||'').match(/Cena\s+produktu[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    if(m) return cleanMoney(m[1]);
+
+    // 2) Якщо є список товарів — сумуємо всі рядки товарів, а не беремо останній товар
+    const summed = sumProductLines(t);
+    if(summed) return summed;
 
     return null;
   }
 
+  function getTotal(t){
+    const m = String(t||'').match(/[Łł][ąa]cznie[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]?/i);
+    return m ? cleanMoney(m[1]) : null;
+  }
+
+  function getDelivery(t){
+    const s = String(t||'');
+    if(/Dostawa\s+InPost[:\s]+GRATIS|Dostawa[:\s]+GRATIS/i.test(s)) return 'gratis';
+    const m = s.match(/Dostawa\s+InPost[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i) || s.match(/Dostawa[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    return m ? cleanMoney(m[1]) : null;
+  }
+
   function getProduct(t){
-    const lines = t.split('\n').map(l=>l.trim()).filter(Boolean);
-    const productLines = lines.filter(l =>
-      /^[-—]/.test(l) &&
-      /cm|mm|okrąg|prostokąt|błyszczące|ryflowane|wyprzedaż/i.test(l) &&
-      !/adres|dostawa|razem|łącznie|czas/i.test(l)
-    );
-    return productLines.length ? productLines.map(l=>l.replace(/^[-—]\s*/, '')).join(' | ') : null;
+    const productLines = getProductLines(t);
+    return productLines.length ? productLines.map(l=>l.replace(/^[-—•▪■]\s*/, '').trim()).join(' | ') : null;
+  }
+
+  function isBadName(n){
+    const v = String(n||'').trim().toLowerCase();
+    if(!v) return true;
+    if(/szukam|ochron|st[óo]ł|kwadrat|prostok[ąa]t|okr[ąa]g|drewno|laminat|kuchnia|salon|biurko|wymiar|zam[óo]wi|pytanie|produkt|grubość|płatno|dostaw|adres/i.test(v)) return true;
+    const parts = v.split(/\s+/);
+    return parts.some(p => NOT_NAMES.has(p));
+  }
+
+  function cleanNameCandidate(t){
+    let v = String(t||'')
+      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,' ')
+      .replace(/(?:tel\.?|telefon|phone|nr\.?\s*tel\.?)\s*[:.]?/ig,' ')
+      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,' ')
+      .replace(/\b(ul\.?|ulica|al\.?|aleja)\b[\s\S]*$/i,' ')
+      .replace(/\d{2}-\d{3}[\s\S]*$/,' ')
+      .split(',')[0]
+      .replace(/^[,;:\s]+|[,;:\s]+$/g,'')
+      .replace(/\s+/g,' ')
+      .trim();
+    return v;
   }
 
   function getName(t){
-    const words = t.trim().split(/\s+/);
-    // Тільки якщо перші два слова схожі на ім'я + прізвище
-    if(words.length >= 2){
-      const w1 = words[0].replace(/[,;]/g,'');
-      const w2 = words[1].replace(/[,;]/g,'');
-      // Має бути мінімум 2 літери, без цифр, не в списку заборонених
-      if(w1.length>=2 && w2.length>=2 && !/\d/.test(w1+w2) &&
-         !NOT_NAMES.has(w1.toLowerCase()) && !NOT_NAMES.has(w2.toLowerCase()) &&
-         !/mm|cm|zł|@/.test(w1+w2)){
-        return w1+' '+w2;
-      }
-    }
-    // Fallback: "jestem/nazywam się X"
-    const m=t.match(/(?:jestem|nazywam się|imię:\s*)([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+(?:\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ]+)?)/i);
-    return m?m[1]:null;
+    const raw = String(t||'').trim();
+    if(!raw || ADDR_EXCLUDE.test(raw)) return null;
+
+    const lastBot = hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content || '';
+    const botAskedShipping = /imi[eę]|nazwisko|dane do wysyłki|dostawy|telefon|email|adres/i.test(lastBot);
+    const hasContactOrAddress = !!(getPhone(raw) || getEmail(raw) || /\d{2}-\d{3}|\b(ul\.?|ulica|al\.?|aleja)\b/i.test(raw));
+
+    // Ім’я витягуємо тільки коли бот вже просить дані доставки або в повідомленні є контакт/адреса
+    // Так не буде помилок типу "Szukam ochrony" або "Stół kwadrat" як ім’я.
+    if(!botAskedShipping && !hasContactOrAddress && !/(?:jestem|nazywam się|imi[eę]|nazwisko)[:\s]/i.test(raw)) return null;
+
+    let explicit = raw.match(/(?:jestem|nazywam się|imi[eę](?:\s+i\s+nazwisko)?\s*:?)([A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ .'-]+(?:\s+[A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ .'-]+)?)/i);
+    let candidate = explicit ? explicit[1] : cleanNameCandidate(raw);
+
+    const words = candidate
+      .replace(/[^A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ .'-]/g,' ')
+      .split(/\s+/)
+      .map(w => w.trim())
+      .filter(Boolean)
+      .slice(0,3);
+
+    if(words.length < 2) return null;
+    if(words.some(w => w.length < 2 || NOT_NAMES.has(w.toLowerCase()) || /mm|cm|zł/i.test(w))) return null;
+
+    const name = words.join(' ');
+    return isBadName(name) ? null : name;
   }
     function getAddress(t){
     const raw = String(t||'').trim();
@@ -416,9 +484,15 @@
   function buildLeadData(extra={}){
     const utm=getUTM();
     const pNum=parseFloat(ses.price)||0;
-    const delivery=pNum>=500?'gratis':'18';
-    const total=pNum>0?(pNum>=500?pNum:pNum+18):0;
-    if(total>0)ses.total=String(total);
+
+    let delivery = ses.delivery || (pNum>=500 ? 'gratis' : '18');
+    let total = ses.total;
+
+    if(!total && pNum>0){
+      total = String(delivery === 'gratis' ? pNum : pNum + (parseFloat(delivery)||0));
+    }
+    if(total) ses.total = String(total);
+
     return{
       session_id:SID,
       name:ses.name||'',
@@ -528,11 +602,12 @@
     async function generateStripe(){
     try{
       const lastBot=hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content||'';
-      const rm=lastBot.match(/[Łł][ąa]cznie[:\s]+(\d+)|[Rr]azem[:\s]+(\d+)/);
       const pNum=parseFloat(ses.price)||0;
-      const delivery=pNum>=500?0:18;
-      const fromBot=rm?parseInt(rm[1]||rm[2]):0;
-      const finalTotal=ses.total||(fromBot>0?String(fromBot):String(pNum+delivery));
+      const parsedTotal=getTotal(lastBot);
+      const deliveryVal = ses.delivery || getDelivery(lastBot) || (pNum>=500?'gratis':'18');
+      if(deliveryVal) ses.delivery = deliveryVal;
+      const finalTotal=ses.total||parsedTotal||String(deliveryVal==='gratis'?pNum:pNum+(parseFloat(deliveryVal)||0));
+      ses.total = String(finalTotal);
       console.log('[SG] Stripe total:',finalTotal);
       const paymentPayload = buildLeadData({
         product: ses.product || 'Elastyczne szkło',
@@ -569,8 +644,8 @@
     addUser(text);showTyping();
 
     // Payment method detection
-    if(text.includes('Za pobraniem')||text.toLowerCase().includes('pobraniem'))ses.paymentMethod='cod';
-    if(text.includes('Online')||text.includes('karta')||text.includes('BLIK'))ses.paymentMethod='stripe';
+    if(/za pobraniem|pobraniem|przy dostawie|przy odbiorze|płatność przy odbiorze|platnosc przy odbiorze|gotówką|gotowką|gotowka|odbiór/i.test(text)) ses.paymentMethod='cod';
+    if(/online|karta|blik|przelew|zapłać|zaplac/i.test(text)) ses.paymentMethod='stripe';
 
     // Circle detection - if user confirms okrągły, find last same-dimension and convert
     if(/tak.*okr[ąa]g|okr[ąa]g.*tak/i.test(text) || text === 'Tak, okrągły') {
@@ -591,7 +666,9 @@
        /pobraniem|zmienić.*met|cod|za pobraniem/i.test(text)) {
       ses.paymentMethod = 'cod';
       const pNum = parseFloat(ses.price)||0;
-      const total = pNum>=500?pNum:pNum+18;
+      const deliveryVal = ses.delivery || (pNum>=500?'gratis':'18');
+      const total = ses.total || String(deliveryVal==='gratis'?pNum:pNum+(parseFloat(deliveryVal)||0));
+      ses.delivery = deliveryVal;
       ses.total = String(total);
       showCOD(total);
       if(ses.leadFired){
@@ -608,7 +685,7 @@
     const phone=getPhone(text),email=getEmail(text),name=getName(text),addr=getAddress(text);
     if(phone&&!ses.phone)ses.phone=phone;
     if(email&&!ses.email)ses.email=email;
-    if(name&&!ses.name)ses.name=name;
+    if(name && (!ses.name || isBadName(ses.name))) ses.name=name;
     if(addr)ses.address=addr;
     if((phone||email)&&!ses.contact)ses.contact=phone||email;
 
@@ -631,11 +708,15 @@
       const reply=data.content?.[0]?.text||'Przepraszamy, spróbuj ponownie.';
       hist.push({role:'assistant',content:reply});
 
-      const price=getPrice(reply),product=getProduct(reply),nameBot=getNameFromBot(reply),addrBot=getAddressFromBot(reply);
+      const price=getPrice(reply),totalParsed=getTotal(reply),deliveryParsed=getDelivery(reply),product=getProduct(reply),nameBot=getNameFromBot(reply),addrBot=getAddressFromBot(reply);
       if(price)ses.price=price;
+      if(totalParsed)ses.total=totalParsed;
+      if(deliveryParsed)ses.delivery=deliveryParsed;
       if(product)ses.product=product;
-      if(nameBot&&!ses.name)ses.name=nameBot;
+      if(nameBot && (!ses.name || isBadName(ses.name))) ses.name=nameBot;
       if(addrBot)ses.address=addrBot;
+      if(/płatność przy odbiorze|platnosc przy odbiorze|za pobraniem|przy dostawie|przy odbiorze/i.test(reply)) ses.paymentMethod='cod';
+      if(/link do płatności pojawi|link do platnosci pojawi|online kartą|online karta|BLIK/i.test(reply) && ses.paymentMethod!=='cod') ses.paymentMethod='stripe';
 
       addBot(reply);addTime();detectQR(reply);
 
@@ -654,7 +735,10 @@
         ses.paymentLinkSent=true;
         if(ses.paymentMethod==='cod'){
           const pNum=parseFloat(ses.price)||0;
-          const total=pNum>=500?pNum:pNum+18;
+          const deliveryVal = ses.delivery || (pNum>=500?'gratis':'18');
+          const total = ses.total || String(deliveryVal==='gratis'?pNum:pNum+(parseFloat(deliveryVal)||0));
+          ses.delivery = deliveryVal;
+          ses.total = String(total);
           showCOD(total);
           fireLead(); // один раз
         } else {
