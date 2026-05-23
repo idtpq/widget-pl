@@ -24,6 +24,9 @@
     #sg-root{position:fixed;bottom:24px;right:24px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
     #sg-btn{width:58px;height:58px;border-radius:50%;background:#1c3d2e;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.22);transition:transform .2s,box-shadow .2s;position:relative;}
     #sg-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.28);}
+    #sg-btn{animation:sg-chat-btn-pulse 1.9s ease-out infinite;}
+    #sg-btn:hover{animation-play-state:paused;}
+    @keyframes sg-chat-btn-pulse{0%{box-shadow:0 4px 16px rgba(0,0,0,.22),0 0 0 0 rgba(28,61,46,.45);}70%{box-shadow:0 4px 16px rgba(0,0,0,.22),0 0 0 13px rgba(28,61,46,0);}100%{box-shadow:0 4px 16px rgba(0,0,0,.22),0 0 0 0 rgba(28,61,46,0);}}
     #sg-btn svg{width:26px;height:26px;stroke:#fff;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
     #sg-badge{position:absolute;top:-2px;right:-2px;width:18px;height:18px;border-radius:50%;background:#e53e3e;border:2px solid #fff;display:none;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;}
     #sg-tooltip{position:absolute;bottom:68px;right:0;background:#1c3d2e;color:#fff;font-size:13px;padding:10px 14px;border-radius:12px 12px 0 12px;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2);display:none;cursor:pointer;line-height:1.4;}
@@ -756,16 +759,16 @@
   }
 
   function autoOpen(){
+    // Автовідкриття чату вимкнено.
+    // Залишається тільки повідомлення біля іконки чату.
     if(sessionStorage.getItem('sg_v'))return;
     setTimeout(()=>{
       if(!open){
-        const t=el('sg-tooltip');t.style.display='block';
-        setTimeout(()=>{if(!open)t.style.display='none';},8000);
+        const t=el('sg-tooltip');
+        t.style.display='block';
+        sessionStorage.setItem('sg_v','1');
       }
     },20000);
-    setTimeout(()=>{
-      if(!open){sessionStorage.setItem('sg_v','1');el('sg-tooltip').style.display='none';openChat();}
-    },35000);
   }
 
   function init(){
