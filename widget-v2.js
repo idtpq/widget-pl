@@ -302,6 +302,34 @@
     return addr || null;
   }
 
+
+  function getNameFromAddressValue(addr){
+    const raw = String(addr||'').trim();
+    if(!raw) return null;
+
+    let first = raw.split(',')[0] || '';
+    first = first
+      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,' ')
+      .replace(/(?:tel\.?|telefon|phone|nr\.?\s*tel\.?)\s*[:.]?/ig,' ')
+      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,' ')
+      .replace(/\b(ul\.?|ulica|al\.?|aleja)\b[\s\S]*$/i,' ')
+      .replace(/\d{2}-\d{3}[\s\S]*$/,' ')
+      .replace(/[^A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ .'-]/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+
+    const words = first.split(/\s+/).filter(Boolean).slice(0,3);
+    if(words.length < 2) return null;
+    if(words.some(w => w.length < 2 || NOT_NAMES.has(w.toLowerCase()) || /mm|cm|zł/i.test(w))) return null;
+
+    const name = words.join(' ');
+    return isBadName(name) ? null : name;
+  }
+
+  function getNameFromBotAddress(t){
+    return getNameFromAddressValue(getAddressFromBot(t));
+  }
+
   function cleanMoney(v){
     return String(v||'').replace(/\s+/g,'').replace(',', '.');
   }
@@ -495,6 +523,9 @@
       total = String(delivery === 'gratis' ? pNum : pNum + (parseFloat(delivery)||0));
     }
     if(total) ses.total = String(total);
+
+    const derivedName = (!ses.name || isBadName(ses.name)) ? getNameFromAddressValue(ses.address) : null;
+    if(derivedName) ses.name = derivedName;
 
     return{
       session_id:SID,
@@ -711,13 +742,14 @@
       const reply=data.content?.[0]?.text||'Przepraszamy, spróbuj ponownie.';
       hist.push({role:'assistant',content:reply});
 
-      const price=getPrice(reply),totalParsed=getTotal(reply),deliveryParsed=getDelivery(reply),product=getProduct(reply),nameBot=getNameFromBot(reply),addrBot=getAddressFromBot(reply);
+      const price=getPrice(reply),totalParsed=getTotal(reply),deliveryParsed=getDelivery(reply),product=getProduct(reply),nameBot=getNameFromBot(reply),addrBot=getAddressFromBot(reply),nameAddr=getNameFromBotAddress(reply);
       if(price)ses.price=price;
       if(totalParsed)ses.total=totalParsed;
       if(deliveryParsed)ses.delivery=deliveryParsed;
       if(product)ses.product=product;
       if(nameBot && (!ses.name || isBadName(ses.name))) ses.name=nameBot;
       if(addrBot)ses.address=addrBot;
+      if(nameAddr && (!ses.name || isBadName(ses.name))) ses.name=nameAddr;
       if(/płatność przy odbiorze|platnosc przy odbiorze|za pobraniem|przy dostawie|przy odbiorze/i.test(reply)) ses.paymentMethod='cod';
       if(/link do płatności pojawi|link do platnosci pojawi|online kartą|online karta|BLIK/i.test(reply) && ses.paymentMethod!=='cod') ses.paymentMethod='stripe';
 
