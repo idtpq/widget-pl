@@ -61,8 +61,18 @@
     .sg-qbtn{background:#fff;border:1.5px solid #1c3d2e;color:#1c3d2e;border-radius:20px;padding:6px 13px;font-size:13px;cursor:pointer;transition:all .15s;font-family:inherit;line-height:1.3;}
     .sg-qbtn:hover{background:#1c3d2e;color:#fff;}
     .sg-pay-wrap{display:flex;justify-content:center;padding:8px 0;}
-    .sg-pay-btn{display:inline-flex;align-items:center;gap:8px;background:#16a34a;color:#fff;text-decoration:none;padding:13px 22px;border-radius:12px;font-size:15px;font-weight:600;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:background .15s;}
-    .sg-pay-btn:hover{background:#15803d;}
+    .sg-pay-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;text-decoration:none;padding:14px 20px;border-radius:16px;font-size:18px;font-weight:800;letter-spacing:-0.01em;box-shadow:0 10px 26px rgba(0,0,0,.18);transition:transform .15s,box-shadow .15s,filter .15s;min-width:286px;border:2px solid #171717;}
+    .sg-pay-btn:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(0,0,0,.22);filter:brightness(1.03);}
+    .sg-pay-btn .sg-blik-logo{display:inline-flex;align-items:center;gap:8px;background:#111;border:2px solid #fff;border-radius:10px;padding:5px 9px;line-height:1;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
+    .sg-pay-btn .sg-blik-word{font-size:18px;font-weight:900;letter-spacing:.02em;color:#fff;}
+    .sg-pay-btn .sg-blik-dot{width:9px;height:9px;border-radius:50%;background:#ff3b30;display:inline-block;box-shadow:0 0 0 2px rgba(255,59,48,.18);}
+    .sg-pay-btn .sg-pay-amount{font-size:19px;font-weight:900;color:#fff;white-space:nowrap;}
+    .sg-pay-note{font-size:12px;color:#6b7280;text-align:center;margin-top:2px;}
+    .sg-pay-loading{margin:8px 12px;padding:14px 14px;border-radius:14px;background:#f7f7f5;border:1px solid #ece7de;}
+    .sg-pay-loading-top{font-size:13px;color:#374151;line-height:1.45;margin-bottom:10px;text-align:center;}
+    .sg-pay-loading-btn{display:flex;align-items:center;justify-content:center;gap:10px;min-width:286px;margin:0 auto;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;border-radius:16px;padding:14px 20px;border:2px solid #171717;opacity:.92;}
+    .sg-pay-loading-spinner{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.28);border-top-color:#ffffff;animation:sg-spin .8s linear infinite;}
+    @keyframes sg-spin{to{transform:rotate(360deg);}}
     .sg-cod-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:13px;color:#15803d;text-align:center;margin:4px 12px;}
     #sg-ft{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #ede8e0;background:#fff;flex-shrink:0;align-items:flex-end;}
     #sg-ta{flex:1;border:1.5px solid #ddd7ce;border-radius:10px;padding:9px 12px;font-size:14px;line-height:1.4;resize:none;outline:none;max-height:80px;font-family:inherit;color:#1a1a1a;background:#faf8f5;transition:border-color .15s;}
@@ -187,6 +197,27 @@
     } else if((t.includes('jak woli')&&t.includes('zapłaci'))||(t.includes('metod')&&t.includes('płat'))){
       setQR(['💳 Online (karta/BLIK)','🚚 Za pobraniem']);
     }
+  }
+
+  function clearPaymentUi(){
+    el('sg-log').querySelectorAll('.sg-pay-loading, .sg-pay-ready').forEach(n => n.remove());
+  }
+
+  function showPaymentLoading(total){
+    clearQR();
+    clearPaymentUi();
+    const sidEl = el('sg-sid');
+    if(sidEl) sidEl.textContent = 'Nr zamówienia: ' + SID;
+    const w = document.createElement('div');
+    w.className = 'sg-pay-loading';
+    w.innerHTML =       '<div class="sg-pay-loading-top">Przygotowuję link do płatności BLIK / karta. Zwykle zajmuje to kilka sekund.</div>' +
+      '<div class="sg-pay-loading-btn">' +
+        '<span class="sg-pay-loading-spinner"></span>' +
+        '<span class="sg-blik-logo"><span class="sg-blik-word">BLIK</span><span class="sg-blik-dot"></span></span>' +
+        '<span class="sg-pay-amount">' + total + ' zł</span>' +
+      '</div>' +
+      '<div class="sg-pay-note">Płatność otworzy się przez Stripe, ale można zapłacić także BLIK-iem.</div>';
+    el('sg-log').appendChild(w);scroll();
   }
 
   function showPayBtn(url, total){
@@ -567,21 +598,9 @@
   // Відправити зміну замовлення (НЕ новий лід)
   async function fireUpdate(changeType, extra={}){
     try{
-      const payload = {...buildLeadData(),...extra,change_type:changeType};
-
-      // Якщо клієнт змінив оплату на COD / за побранням,
-      // не передаємо Stripe link в /update, щоб він не прилітав у TG як активне посилання.
-      if(
-        payload.payment_method === 'cod' ||
-        String(changeType).toLowerCase().includes('cod') ||
-        String(changeType).toLowerCase().includes('pobraniem')
-      ){
-        delete payload.stripe_url;
-      }
-
       await fetch(WORKER_URL+'/update',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(payload),
+        body:JSON.stringify({...buildLeadData(),...extra,change_type:changeType}),
       });
       console.log('[SG] Update fired:',changeType);
     }catch(e){console.error('[SG] Update error:',e);}
@@ -663,6 +682,7 @@
         contact: ses.email || ses.phone || ses.contact || '',
       });
 
+      showPaymentLoading(finalTotal);
       const res=await fetch(WORKER_URL+'/payment',{
         method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(paymentPayload),
@@ -674,10 +694,11 @@
         showPayBtn(d.url,finalTotal);
         await sendLeadWithStripe(d.url); // один раз, з посиланням
       } else{
+        clearPaymentUi();
         console.error('[SG] Stripe:',d.error);
         addBot('Problem z płatnością online. Proszę skontaktować się: +48 45 104 05 40');
       }
-    }catch(e){console.error('[SG] Stripe error:',e);}
+    }catch(e){clearPaymentUi();console.error('[SG] Stripe error:',e);}
   }
 
   async function send(quickText){
