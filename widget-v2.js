@@ -63,14 +63,13 @@
     .sg-pay-wrap{display:flex;justify-content:center;padding:8px 0;}
     .sg-pay-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;text-decoration:none;padding:14px 20px;border-radius:16px;font-size:18px;font-weight:800;letter-spacing:-0.01em;box-shadow:0 10px 26px rgba(0,0,0,.18);transition:transform .15s,box-shadow .15s,filter .15s;min-width:286px;border:2px solid #171717;}
     .sg-pay-btn:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(0,0,0,.22);filter:brightness(1.03);}
-    .sg-pay-btn .sg-blik-logo{display:inline-flex;align-items:center;gap:8px;background:#111;border:2px solid #fff;border-radius:10px;padding:5px 9px;line-height:1;box-shadow:inset 0 0 0 1px rgba(255,255,255,.06);}
-    .sg-pay-btn .sg-blik-word{font-size:18px;font-weight:900;letter-spacing:.02em;color:#fff;}
-    .sg-pay-btn .sg-blik-dot{width:9px;height:9px;border-radius:50%;background:#ff3b30;display:inline-block;box-shadow:0 0 0 2px rgba(255,59,48,.18);}
+    .sg-pay-btn .sg-blik-logo{display:inline-flex;align-items:center;justify-content:center;background:#fff;border-radius:10px;padding:4px 8px;line-height:1;box-shadow:0 0 0 1px rgba(255,255,255,.12);}
+    .sg-pay-btn .sg-blik-logo-img{display:block;height:22px;width:auto;}
     .sg-pay-btn .sg-pay-amount{font-size:19px;font-weight:900;color:#fff;white-space:nowrap;}
     .sg-pay-note{font-size:12px;color:#6b7280;text-align:center;margin-top:2px;}
     .sg-pay-loading{margin:8px 12px;padding:14px 14px;border-radius:14px;background:#f7f7f5;border:1px solid #ece7de;}
     .sg-pay-loading-top{font-size:13px;color:#374151;line-height:1.45;margin-bottom:10px;text-align:center;}
-    .sg-pay-loading-btn{display:flex;align-items:center;justify-content:center;gap:10px;min-width:286px;margin:0 auto;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;border-radius:16px;padding:14px 20px;border:2px solid #171717;opacity:.92;}
+    .sg-pay-loading-btn{display:flex;align-items:center;justify-content:center;gap:12px;min-width:286px;margin:0 auto;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;border-radius:16px;padding:14px 20px;border:2px solid #171717;opacity:.92;}
     .sg-pay-loading-spinner{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.28);border-top-color:#ffffff;animation:sg-spin .8s linear infinite;}
     @keyframes sg-spin{to{transform:rotate(360deg);}}
     .sg-cod-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:13px;color:#15803d;text-align:center;margin:4px 12px;}
@@ -200,7 +199,7 @@
   }
 
   function clearPaymentUi(){
-    el('sg-log').querySelectorAll('.sg-pay-loading, .sg-pay-ready').forEach(n => n.remove());
+    el('sg-log').querySelectorAll('#sg-pay-state, .sg-pay-loading, .sg-pay-ready').forEach(n => n.remove());
   }
 
   function showPaymentLoading(total){
@@ -209,11 +208,13 @@
     const sidEl = el('sg-sid');
     if(sidEl) sidEl.textContent = 'Nr zamówienia: ' + SID;
     const w = document.createElement('div');
+    w.id = 'sg-pay-state';
     w.className = 'sg-pay-loading';
-    w.innerHTML =       '<div class="sg-pay-loading-top">Przygotowuję link do płatności BLIK / karta. Zwykle zajmuje to kilka sekund.</div>' +
+    w.innerHTML = 
+      '<div class="sg-pay-loading-top">Przygotowuję link do płatności BLIK / karta. Zwykle zajmuje to kilka sekund.</div>' +
       '<div class="sg-pay-loading-btn">' +
         '<span class="sg-pay-loading-spinner"></span>' +
-        '<span class="sg-blik-logo"><span class="sg-blik-word">BLIK</span><span class="sg-blik-dot"></span></span>' +
+        '<span class="sg-blik-logo"><img src="https://static.tildacdn.com/stor3662-3134-4163-b239-356435383131/817b5e7e6041069785d45e017434adcd.png" alt="BLIK" class="sg-blik-logo-img"></span>' +
         '<span class="sg-pay-amount">' + total + ' zł</span>' +
       '</div>' +
       '<div class="sg-pay-note">Płatność otworzy się przez Stripe, ale można zapłacić także BLIK-iem.</div>';
@@ -222,30 +223,35 @@
 
   function showPayBtn(url, total){
     clearQR();
-    // Змінюємо заголовок на "ID zamówienia"
+    clearPaymentUi();
     const sidEl = el('sg-sid');
     if(sidEl) sidEl.textContent = 'Nr zamówienia: ' + SID;
 
     const w = document.createElement('div');
+    w.id = 'sg-pay-state';
+    w.className = 'sg-pay-ready';
     w.style.cssText = 'padding:8px 12px;';
-    w.innerHTML = `
-      <div style="font-size:13px;color:#374151;margin-bottom:8px;line-height:1.4;">
-        Zamówienie <strong>${SID}</strong> zostanie przekazane do realizacji po opłaceniu.
-      </div>
-      <div style="display:flex;justify-content:center;margin-bottom:8px;">
-        <a href="${url}" target="_blank" rel="noopener" class="sg-pay-btn">💳 Zapłać ${total} zł</a>
-      </div>
-      <div style="font-size:11px;color:#9ca3af;text-align:center;cursor:pointer;" onclick="window.__sgChangeToCOD&&window.__sgChangeToCOD(${total})">
-        Zmienić na płatność za pobraniem →
-      </div>`;
+    w.innerHTML = 
+      '<div style="font-size:13px;color:#374151;margin-bottom:8px;line-height:1.4;">' +
+        'Zamówienie <strong>' + SID + '</strong> zostanie przekazane do realizacji po opłaceniu.' +
+      '</div>' +
+      '<div style="display:flex;justify-content:center;margin-bottom:8px;">' +
+        '<a href="' + url + '" target="_blank" rel="noopener" class="sg-pay-btn" aria-label="Zapłać BLIK lub kartą">' +
+          '<span class="sg-blik-logo"><img src="https://static.tildacdn.com/stor3662-3134-4163-b239-356435383131/817b5e7e6041069785d45e017434adcd.png" alt="BLIK" class="sg-blik-logo-img"></span>' +
+          '<span class="sg-pay-amount">Zapłać ' + total + ' zł</span>' +
+        '</a>' +
+      '</div>' +
+      '<div class="sg-pay-note">Płatność otworzy się przez Stripe, ale można zapłacić także BLIK-iem.</div>' +
+      '<div style="font-size:11px;color:#9ca3af;text-align:center;cursor:pointer;margin-top:8px;" onclick="window.__sgChangeToCOD&&window.__sgChangeToCOD(' + total + ')">' +
+        'Zmienić na płatność za pobraniem →' +
+      '</div>';
     el('sg-log').appendChild(w);scroll();
 
-    // Register COD change handler
     window.__sgChangeToCOD = function(t) {
       ses.paymentMethod = 'cod';
+      clearPaymentUi();
       clearQR();
       showCOD(t);
-      // Зміна методу — окреме повідомлення, не новий лід
       fireUpdate('payment_changed_to_cod', {payment_method:'cod', total:t});
       savePostPaymentUpdate('payment_changed_to_cod_button');
     };
