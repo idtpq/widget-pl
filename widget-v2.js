@@ -211,13 +211,12 @@
     w.id = 'sg-pay-state';
     w.className = 'sg-pay-loading';
     w.innerHTML = 
-      '<div class="sg-pay-loading-top">Przygotowuję link do płatności BLIK / karta. Zwykle zajmuje to kilka sekund.</div>' +
+      '<div class="sg-pay-loading-top">Przygotowuję bezpieczny link do płatności. Zwykle zajmuje to kilka sekund.</div>' +
       '<div class="sg-pay-loading-btn">' +
         '<span class="sg-pay-loading-spinner"></span>' +
-        '<span class="sg-blik-logo"><img src="https://static.tildacdn.com/stor3662-3134-4163-b239-356435383131/817b5e7e6041069785d45e017434adcd.png" alt="BLIK" class="sg-blik-logo-img"></span>' +
-        '<span class="sg-pay-amount">' + total + ' zł</span>' +
+        '<span class="sg-pay-amount">Generuję link ' + total + ' zł</span>' +
       '</div>' +
-      '<div class="sg-pay-note">Płatność otworzy się przez Stripe, ale można zapłacić także BLIK-iem.</div>';
+      '<div class="sg-pay-note">Po wygenerowaniu pojawi się przycisk płatności BLIK / karta.</div>';
     el('sg-log').appendChild(w);scroll();
   }
 
