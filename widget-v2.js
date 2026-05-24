@@ -3,6 +3,64 @@
 
   const WORKER_URL = 'https://bot.metsukisutemi.workers.dev';
 
+  const COUNTRY_CONFIG = {
+    PL: {
+      code: 'PL',
+      domains: ['elastyczne-szklo.com', 'www.elastyczne-szklo.com'],
+      siteLabel: 'elastyczne-szklo.com',
+      headerName: 'Marta — Doradca',
+      avatar: 'M',
+      placeholder: 'Napisz wiadomość…',
+      tooltip: '💬 Możemy pomóc — zapytaj!',
+      currencyLabel: 'zł',
+      deliveryLabel: 'InPost',
+      allowCod: true,
+      initialButtons: ['🛒 Chcę zamówić','❓ Mam pytanie'],
+      startMessage: 'Dzień dobry!\n\nJestem Marta — doradca w elastyczne-szklo.com. Pomogę dobrać odpowiednie szkło ochronne do Pana/Pani stołu.\n\nCzy chce Pan/Pani złożyć zamówienie, czy ma pytanie o produkt?',
+      payButtonPrefix: '💳 Zapłać',
+      orderAfterPayment: id => `Zamówienie <strong>${id}</strong> zostanie przekazane do realizacji po opłaceniu.`,
+      codChangeText: 'Zmienić na płatność za pobraniem →',
+      contactError: 'Problem z płatnością online. Proszę skontaktować się: +48 45 104 05 40',
+      connectionError: 'Brak połączenia. Proszę odświeżyć stronę.',
+      formatMoney: v => `${String(v).replace('.', ',')} zł`,
+      phoneRegex: /(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/,
+      phoneStripRegex: /(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,
+    },
+    DK: {
+      code: 'DK',
+      domains: ['bordfolie.com', 'www.bordfolie.com'],
+      siteLabel: 'bordfolie.com',
+      headerName: 'Marta — Rådgiver',
+      avatar: 'M',
+      placeholder: 'Skriv en besked…',
+      tooltip: '💬 Vi kan hjælpe — spørg her!',
+      currencyLabel: 'kr',
+      deliveryLabel: 'GLS',
+      allowCod: false,
+      initialButtons: ['🛒 Jeg vil bestille','❓ Jeg har et spørgsmål'],
+      startMessage: 'Hej!\n\nJeg er Marta — rådgiver hos bordfolie.com. Jeg hjælper dig med klar bordfolie / gennemsigtig PVC-bordbeskytter efter mål.\n\nVil du bestille, eller har du et spørgsmål om produktet?',
+      payButtonPrefix: '💳 Betal',
+      orderAfterPayment: id => `Bestillingen <strong>${id}</strong> sendes videre til produktion efter betaling.`,
+      codChangeText: '',
+      contactError: 'Der opstod et problem med online betaling. Skriv venligst til bordfolie@gmail.com',
+      connectionError: 'Ingen forbindelse. Opdater venligst siden.',
+      formatMoney: v => `${String(v).replace('.', ',')} kr`,
+      phoneRegex: /(\+45[\s-]?)?(\d{2}[\s-]?\d{2}[\s-]?\d{2}[\s-]?\d{2})/,
+      phoneStripRegex: /(\+45[\s-]?)?\d{2}[\s-]?\d{2}[\s-]?\d{2}[\s-]?\d{2}/g,
+    }
+  };
+
+  function detectCountry(){
+    const h = String(location.hostname || '').toLowerCase();
+    for (const [code, cfg] of Object.entries(COUNTRY_CONFIG)) {
+      if ((cfg.domains || []).some(d => h === d || h.endsWith('.' + d))) return code;
+    }
+    return 'PL';
+  }
+
+  const COUNTRY = detectCountry();
+  const CFG = COUNTRY_CONFIG[COUNTRY] || COUNTRY_CONFIG.PL;
+
   function getUTM() {
     return {
       source:   new URLSearchParams(location.search).get('utm_source')   || sessionStorage.getItem('sg_utm_source')   || '',
@@ -97,10 +155,10 @@
     r.innerHTML=`
       <div id="sg-box" class="hidden">
         <div id="sg-hd">
-          <div class="sg-hav">M</div>
+          <div class="sg-hav">${CFG.avatar}</div>
           <div class="sg-htxt">
-            <div class="sg-hname">Marta — Doradca</div>
-            <div class="sg-hsub"><span class="sg-online"></span>elastyczne-szklo.com</div>
+            <div class="sg-hname">${CFG.headerName}</div>
+            <div class="sg-hsub"><span class="sg-online"></span>${CFG.siteLabel}</div>
           </div>
           <button id="sg-x">✕</button>
         </div>
@@ -108,14 +166,14 @@
         <div id="sg-log" role="log" aria-live="polite"></div>
         <div id="sg-qr"></div>
         <div id="sg-ft">
-          <textarea id="sg-ta" rows="1" placeholder="Napisz wiadomość…"></textarea>
+          <textarea id="sg-ta" rows="1" placeholder="${CFG.placeholder}"></textarea>
           <button id="sg-go">
             <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
-        <div id="sg-pw">elastyczne-szklo.com</div>
+        <div id="sg-pw">${CFG.siteLabel}</div>
       </div>
-      <div id="sg-tooltip">💬 Możemy pomóc — zapytaj!</div>
+      <div id="sg-tooltip">${CFG.tooltip}</div>
       <button id="sg-btn">
         <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span id="sg-badge"></span>
@@ -162,18 +220,34 @@
   function clearQR(){el('sg-qr').innerHTML='';}
 
   function detectQR(botText){
-    // Показуємо кнопки ТІЛЬКИ якщо в повідомленні є РІВНО ОДНЕ питання
     const questionCount = (botText.match(/[?]/g)||[]).length;
-    if(questionCount > 1) return; // Два питання = не показуємо кнопки
+    if(questionCount > 1) return;
 
     const t = botText.toLowerCase();
-
-    // Не показуємо кнопки після підтвердження замовлення або платежу
     if(ses.paymentLinkSent) return;
-    if(t.includes('przyjęłam zamówienie')) return;
+    if(t.includes('przyjęłam zamówienie') || t.includes('ordren er modtaget')) return;
+
+    if(COUNTRY === 'DK'){
+      if(t.includes('bestille') || t.includes('spørgsmål') || t.includes('sporgsmal')){
+        setQR(CFG.initialButtons);
+      } else if(t.includes('bordplade') || t.includes('overflade') || t.includes('materiale')){
+        setQR(['Mat træ','Glas / lak / højglans','Laminat']);
+      } else if(t.includes('intensiv') && !t.includes('mål')){
+        setQR(['Intensiv brug','Let brug']);
+      } else if(t.includes('1.5mm') && t.includes('2mm') && !t.includes('mål')){
+        setQR(['1.5mm — billigere','2mm — stærkere']);
+      } else if((t.includes('rund') || t.includes('cirkel')) && !t.includes('mål')){
+        setQR(['Ja, rundt','Nej, rektangulært']);
+      } else if(t.includes('flere') || t.includes('andre')){
+        setQR(['Ja, jeg har flere','Nej, det er alt']);
+      } else if(t.includes('betale') || t.includes('betaling')){
+        setQR(['💳 Online (kort)']);
+      }
+      return;
+    }
 
     if(t.includes('złożyć zamówienie')||t.includes('pytanie o produkt')){
-      setQR(['🛒 Chcę zamówić','❓ Mam pytanie']);
+      setQR(CFG.initialButtons);
     } else if((t.includes('rodzaj blatu')||t.includes('jaki rodzaj blatu'))){
       setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat']);
     } else if(t.includes('intensywnie')&&!t.includes('wymiary')){
@@ -191,30 +265,30 @@
 
   function showPayBtn(url, total){
     clearQR();
-    // Змінюємо заголовок на "ID zamówienia"
     const sidEl = el('sg-sid');
     if(sidEl) sidEl.textContent = 'Nr zamówienia: ' + SID;
+
+    const changeHtml = CFG.allowCod
+      ? `<div style="font-size:11px;color:#9ca3af;text-align:center;cursor:pointer;" onclick="window.__sgChangeToCOD&&window.__sgChangeToCOD(${Number(total) || 0})">${CFG.codChangeText}</div>`
+      : '';
 
     const w = document.createElement('div');
     w.style.cssText = 'padding:8px 12px;';
     w.innerHTML = `
       <div style="font-size:13px;color:#374151;margin-bottom:8px;line-height:1.4;">
-        Zamówienie <strong>${SID}</strong> zostanie przekazane do realizacji po opłaceniu.
+        ${CFG.orderAfterPayment(SID)}
       </div>
       <div style="display:flex;justify-content:center;margin-bottom:8px;">
-        <a href="${url}" target="_blank" rel="noopener" class="sg-pay-btn">💳 Zapłać ${total} zł</a>
+        <a href="${url}" target="_blank" rel="noopener" class="sg-pay-btn">${CFG.payButtonPrefix} ${CFG.formatMoney(total)}</a>
       </div>
-      <div style="font-size:11px;color:#9ca3af;text-align:center;cursor:pointer;" onclick="window.__sgChangeToCOD&&window.__sgChangeToCOD(${total})">
-        Zmienić na płatność za pobraniem →
-      </div>`;
+      ${changeHtml}`;
     el('sg-log').appendChild(w);scroll();
 
-    // Register COD change handler
     window.__sgChangeToCOD = function(t) {
+      if(!CFG.allowCod) return;
       ses.paymentMethod = 'cod';
       clearQR();
       showCOD(t);
-      // Зміна методу — окреме повідомлення, не новий лід
       fireUpdate('payment_changed_to_cod', {payment_method:'cod', total:t});
       savePostPaymentUpdate('payment_changed_to_cod_button');
     };
@@ -224,7 +298,7 @@
     const sidEl = el('sg-sid');
     if(sidEl) sidEl.textContent = 'Nr zamówienia: ' + SID;
     const d=document.createElement('div');d.className='sg-cod-box';
-    d.innerHTML='✅ Zamówienie przyjęte!<br>Nr zamówienia: <strong>'+SID+'</strong><br>Płatność za pobraniem: <strong>'+total+' zł</strong><br>Skontaktujemy się wkrótce.';
+    d.innerHTML='✅ Zamówienie przyjęte!<br>Nr zamówienia: <strong>'+SID+'</strong><br>Płatność za pobraniem: <strong>'+CFG.formatMoney(total)+'</strong><br>Skontaktujemy się wkrótce.';
     el('sg-log').appendChild(d);scroll();
   }
 
@@ -235,8 +309,8 @@
       started=true;showTyping();
       await new Promise(r=>setTimeout(r,600));
       el('sg-log').querySelector('.sg-typing')?.remove();
-      addBot('Dzień dobry!\n\nJestem Marta — doradca w elastyczne-szklo.com. Pomogę dobrać odpowiednie szkło ochronne do Pana/Pani stołu.\n\nCzy chce Pan/Pani złożyć zamówienie, czy ma pytanie o produkt?');
-      addTime();setQR(['🛒 Chcę zamówić','❓ Mam pytanie']);
+      addBot(CFG.startMessage);
+      addTime();setQR(CFG.initialButtons);
     }
     el('sg-ta').focus();
   }
@@ -250,18 +324,18 @@
   }
 
   // Data extraction
-  function getPhone(t){const m=t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);return m?m[0].replace(/[\s-]/g,''):null;}
+  function getPhone(t){const m=String(t||'').match(CFG.phoneRegex);return m?m[0].replace(/[\s-]/g,''):null;}
   function getEmail(t){const m=t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:null;}
   // Слова які НЕ є іменами
   const NOT_NAMES = new Set(['chcę','mam','tak','nie','intensywnie','rzadziej','drewno','szkło','laminat','online','pobraniem','zamówienie','okrągły','prostokątny','mocniejsze','tańsze','oblicz','inne','jeszcze','czy','jak','jaki','jakie','które','gdzie','kiedy','proszę','dziękuję','świetnie','dobrze','rozumiem','oczywiście','pewnie']);
   // Тексти кнопок / короткі відповіді, які не мають потрапляти в адресу
-  const ADDR_EXCLUDE = /^(?:🛒\s*)?Chcę zamówić$|^(?:❓\s*)?Mam pytanie$|^Drewno matowe$|^Szkło\s*\/\s*lakier\s*\/\s*połysk$|^Laminat$|^Intensywnie\s*\(kuchnia\/dzieci\)$|^Rzadziej\s*\(biurko\/salon\)$|^1\.5mm\s*—\s*tańsze$|^2mm\s*—\s*mocniejsze$|^Tak,\s*okrągły$|^Nie,\s*prostokątny$|^Tak,\s*mam jeszcze$|^Nie,\s*to wszystko$|^(?:💳\s*)?Online\s*\(karta\/BLIK\)$|^(?:🚚\s*)?Za pobraniem$/i;
+  const ADDR_EXCLUDE = /^(?:🛒\s*)?Chcę zamówić$|^(?:❓\s*)?Mam pytanie$|^Drewno matowe$|^Szkło\s*\/\s*lakier\s*\/\s*połysk$|^Laminat$|^Intensywnie\s*\(kuchnia\/dzieci\)$|^Rzadziej\s*\(biurko\/salon\)$|^1\.5mm\s*—\s*tańsze$|^2mm\s*—\s*mocniejsze$|^Tak,\s*okrągły$|^Nie,\s*prostokątny$|^Tak,\s*mam jeszcze$|^Nie,\s*to wszystko$|^(?:💳\s*)?Online\s*\(karta\/BLIK\)$|^(?:🚚\s*)?Za pobraniem$|^(?:🛒\s*)?Jeg vil bestille$|^(?:❓\s*)?Jeg har et spørgsmål$|^Mat træ$|^Glas\s*\/\s*lak\s*\/\s*højglans$|^Intensiv brug$|^Let brug$|^1\.5mm\s*—\s*billigere$|^2mm\s*—\s*stærkere$|^Ja,\s*rundt$|^Nej,\s*rektangulært$|^Ja,\s*jeg har flere$|^Nej,\s*det er alt$|^(?:💳\s*)?Online\s*\(kort\)$/i;
 
 
   function normalizeAddressPart(t){
     return String(t||'')
       .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,'')
-      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,'')
+      .replace(CFG.phoneStripRegex,'')
       .replace(/^[,;\s]+|[,;\s]+$/g,'')
       .replace(/\s+/g,' ')
       .trim();
@@ -273,7 +347,7 @@
     if(getEmail(v) && normalizeAddressPart(v).length < 3) return false;
     if(/^[+\d\s-]{7,}$/.test(v)) return false; // сам номер телефону не є адресою
     if(/\d{2,3}\s*[xX×]\s*\d{2,3}/.test(v)) return false; // розміри товару не є адресою
-    return /\d{2}-\d{3}|\b(ul\.?|ulica|al\.?|aleja)\b/i.test(v) || /\d/.test(v);
+    return /\d{2}-\d{3}|\b\d{4}\b|\b(ul\.?|ulica|al\.?|aleja|vej|gade|allé|alle|plads|boulevard|stræde|straede)\b/i.test(v) || /\d/.test(v);
   }
 
   function rememberAddressPart(t){
@@ -290,7 +364,7 @@
   }
 
   function getAddressFromBot(t){
-    const m = String(t||'').match(/Adres:\s*([\s\S]*?)(?:\n\s*\n|Link do płatności|Skontaktujemy|$)/i);
+    const m = String(t||'').match(/(?:Adres|Adresse):\s*([\s\S]*?)(?:\n\s*\n|Link do płatności|Betalingslink|Skontaktujemy|Vi kontakter|$)/i);
     if(!m) return null;
     const addr = m[1]
       .split('\n')
@@ -311,9 +385,9 @@
     first = first
       .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,' ')
       .replace(/(?:tel\.?|telefon|phone|nr\.?\s*tel\.?)\s*[:.]?/ig,' ')
-      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,' ')
-      .replace(/\b(ul\.?|ulica|al\.?|aleja)\b[\s\S]*$/i,' ')
-      .replace(/\d{2}-\d{3}[\s\S]*$/,' ')
+      .replace(CFG.phoneStripRegex,' ')
+      .replace(/\b(ul\.?|ulica|al\.?|aleja|vej|gade|allé|alle|plads|boulevard|stræde|straede)\b[\s\S]*$/i,' ')
+      .replace(/\d{2}-\d{3}|\b\d{4}\b[\s\S]*$/,' ')
       .replace(/[^A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ .'-]/g,' ')
       .replace(/\s+/g,' ')
       .trim();
@@ -335,7 +409,7 @@
   }
 
   function getMoneyValuesFromLine(line){
-    return [...String(line||'').matchAll(/([\d\s]+(?:[,.]\d+)?)\s*z[łl]/gi)]
+    return [...String(line||'').matchAll(/([\d\s]+(?:[,.]\d+)?)\s*(?:z[łl]|kr)/gi)]
       .map(m => parseFloat(cleanMoney(m[1])))
       .filter(n => Number.isFinite(n));
   }
@@ -344,8 +418,8 @@
     const l = String(line||'').trim();
     if(!/^[-—•▪■]/.test(l)) return false;
     if(/dostawa|łącznie|razem|czas|adres|link|płatno|opłata/i.test(l)) return false;
-    return /\d{2,4}\s*[xX×х]\s*\d{2,4}|okr[ąa]g|prostok[ąa]t|kwadrat|średnica|śr\.|cm|mm|błyszczące|ryflowane|wyprzedaż/i.test(l)
-      && /z[łl]/i.test(l);
+    return /\d{2,4}\s*[xX×х]\s*\d{2,4}|okr[ąa]g|prostok[ąa]t|kwadrat|średnica|śr\.|rund|rektangel|kvadrat|diameter|cm|mm|błyszczące|ryflowane|riflet|klar|bordfolie|wyprzedaż|udsalg/i.test(l)
+      && /(?:z[łl]|kr)/i.test(l);
   }
 
   function getProductLines(t){
@@ -367,13 +441,13 @@
 
   function getPrice(t){
     // 1) Найкраще джерело — "Razem szkło", якщо бот його написав
-    let m = String(t||'').match(/Razem\s+szk[łl]o[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    let m = String(t||'').match(/(?:Razem\s+szk[łl]o|Produktpris|Samlet\s+produktpris)[:\s]+([\d\s]+(?:[,.]\d+)?)\s*(?:z[łl]|kr)/i);
     if(m) return cleanMoney(m[1]);
 
-    m = String(t||'').match(/Cena\s+towaru[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    m = String(t||'').match(/Cena\s+towaru[:\s]+([\d\s]+(?:[,.]\d+)?)\s*(?:z[łl]|kr)/i);
     if(m) return cleanMoney(m[1]);
 
-    m = String(t||'').match(/Cena\s+produktu[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    m = String(t||'').match(/Cena\s+produktu[:\s]+([\d\s]+(?:[,.]\d+)?)\s*(?:z[łl]|kr)/i);
     if(m) return cleanMoney(m[1]);
 
     // 2) Якщо є список товарів — сумуємо всі рядки товарів, а не беремо останній товар
@@ -384,14 +458,14 @@
   }
 
   function getTotal(t){
-    const m = String(t||'').match(/[Łł][ąa]cznie[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]?/i);
+    const m = String(t||'').match(/(?:[Łł][ąa]cznie|I\s+alt)[:\s]+([\d\s]+(?:[,.]\d+)?)\s*(?:z[łl]|kr)?/i);
     return m ? cleanMoney(m[1]) : null;
   }
 
   function getDelivery(t){
     const s = String(t||'');
-    if(/Dostawa\s+InPost[:\s]+GRATIS|Dostawa[:\s]+GRATIS/i.test(s)) return 'gratis';
-    const m = s.match(/Dostawa\s+InPost[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i) || s.match(/Dostawa[:\s]+([\d\s]+(?:[,.]\d+)?)\s*z[łl]/i);
+    if(/Dostawa\s+InPost[:\s]+GRATIS|Dostawa[:\s]+GRATIS|Levering\s+GLS[:\s]+GRATIS|Levering[:\s]+GRATIS/i.test(s)) return 'gratis';
+    const m = s.match(/Dostawa\s+InPost[:\s]+([\d\s]+(?:[,.]\d+)?)\s*(?:z[łl]|kr)/i) || s.match(/Dostawa[:\s]+([\d\s]+(?:[,.]\d+)?)\s*(?:z[łl]|kr)/i) || s.match(/Levering\s+GLS[:\s]+([\d\s]+(?:[,.]\d+)?)\s*kr/i) || s.match(/Levering[:\s]+([\d\s]+(?:[,.]\d+)?)\s*kr/i);
     return m ? cleanMoney(m[1]) : null;
   }
 
@@ -412,9 +486,9 @@
     let v = String(t||'')
       .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,' ')
       .replace(/(?:tel\.?|telefon|phone|nr\.?\s*tel\.?)\s*[:.]?/ig,' ')
-      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,' ')
-      .replace(/\b(ul\.?|ulica|al\.?|aleja)\b[\s\S]*$/i,' ')
-      .replace(/\d{2}-\d{3}[\s\S]*$/,' ')
+      .replace(CFG.phoneStripRegex,' ')
+      .replace(/\b(ul\.?|ulica|al\.?|aleja|vej|gade|allé|alle|plads|boulevard|stræde|straede)\b[\s\S]*$/i,' ')
+      .replace(/\d{2}-\d{3}|\b\d{4}\b[\s\S]*$/,' ')
       .split(',')[0]
       .replace(/^[,;:\s]+|[,;:\s]+$/g,'')
       .replace(/\s+/g,' ')
@@ -428,7 +502,7 @@
 
     const lastBot = hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content || '';
     const botAskedShipping = /imi[eę]|nazwisko|dane do wysyłki|dostawy|telefon|email|adres/i.test(lastBot);
-    const hasContactOrAddress = !!(getPhone(raw) || getEmail(raw) || /\d{2}-\d{3}|\b(ul\.?|ulica|al\.?|aleja)\b/i.test(raw));
+    const hasContactOrAddress = !!(getPhone(raw) || getEmail(raw) || /\d{2}-\d{3}|\b\d{4}\b|\b(ul\.?|ulica|al\.?|aleja|vej|gade|allé|alle|plads|boulevard|stræde|straede)\b/i.test(raw));
 
     // Ім’я витягуємо тільки коли бот вже просить дані доставки або в повідомленні є контакт/адреса
     // Так не буде помилок типу "Szukam ochrony" або "Stół kwadrat" як ім’я.
@@ -457,13 +531,13 @@
     const withoutContact = normalizeAddressPart(raw);
 
     // Польський індекс — сильний сигнал адреси / міста
-    if(/\d{2}-\d{3}/.test(raw)){
+    if(/\d{2}-\d{3}|\b\d{4}\b/.test(raw)){
       rememberAddressPart(withoutContact || raw);
       return ses.address || withoutContact || raw;
     }
 
     // Стандартні маркери адреси
-    if(/\b(ul\.?|ulica|al\.?|aleja)\b/i.test(raw)){
+    if(/\b(ul\.?|ulica|al\.?|aleja|vej|gade|allé|alle|plads|boulevard|stræde|straede)\b/i.test(raw)){
       rememberAddressPart(withoutContact || raw);
       return ses.address || withoutContact || raw;
     }
@@ -529,6 +603,9 @@
 
     return{
       session_id:SID,
+      country:COUNTRY,
+      site:CFG.siteLabel,
+      currency:CFG.currencyLabel,
       name:ses.name||'',
       phone:ses.phone||'',
       email:ses.email||'',
@@ -644,7 +721,7 @@
       ses.total = String(finalTotal);
       console.log('[SG] Stripe total:',finalTotal);
       const paymentPayload = buildLeadData({
-        product: ses.product || 'Elastyczne szkło',
+        product: ses.product || (COUNTRY === 'DK' ? 'Klar bordfolie' : 'Elastyczne szkło'),
         product_formatted: formatProductForTG(),
         total: finalTotal,
         payment_method: 'stripe',
@@ -663,7 +740,7 @@
         await sendLeadWithStripe(d.url); // один раз, з посиланням
       } else{
         console.error('[SG] Stripe:',d.error);
-        addBot('Problem z płatnością online. Proszę skontaktować się: +48 45 104 05 40');
+        addBot(CFG.contactError);
       }
     }catch(e){console.error('[SG] Stripe error:',e);}
   }
@@ -678,8 +755,8 @@
     addUser(text);showTyping();
 
     // Payment method detection
-    if(/za pobraniem|pobraniem|przy dostawie|przy odbiorze|płatność przy odbiorze|platnosc przy odbiorze|gotówką|gotowką|gotowka|odbiór/i.test(text)) ses.paymentMethod='cod';
-    if(/online|karta|blik|przelew|zapłać|zaplac/i.test(text)) ses.paymentMethod='stripe';
+    if(CFG.allowCod && /za pobraniem|pobraniem|przy dostawie|przy odbiorze|płatność przy odbiorze|platnosc przy odbiorze|gotówką|gotowką|gotowka|odbiór/i.test(text)) ses.paymentMethod='cod';
+    if(/online|karta|kort|blik|przelew|zapłać|zaplac|betaling|betale/i.test(text)) ses.paymentMethod='stripe';
 
     // Circle detection - if user confirms okrągły, find last same-dimension and convert
     if(/tak.*okr[ąa]g|okr[ąa]g.*tak/i.test(text) || text === 'Tak, okrągły') {
@@ -736,7 +813,7 @@
     try{
       const res=await fetch(WORKER_URL,{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({messages:hist}),
+        body:JSON.stringify({messages:hist,country:COUNTRY,page_host:location.hostname}),
       });
       const data=await res.json();
       const reply=data.content?.[0]?.text||'Przepraszamy, spróbuj ponownie.';
@@ -750,8 +827,8 @@
       if(nameBot && (!ses.name || isBadName(ses.name))) ses.name=nameBot;
       if(addrBot)ses.address=addrBot;
       if(nameAddr && (!ses.name || isBadName(ses.name))) ses.name=nameAddr;
-      if(/płatność przy odbiorze|platnosc przy odbiorze|za pobraniem|przy dostawie|przy odbiorze/i.test(reply)) ses.paymentMethod='cod';
-      if(/link do płatności pojawi|link do platnosci pojawi|online kartą|online karta|BLIK/i.test(reply) && ses.paymentMethod!=='cod') ses.paymentMethod='stripe';
+      if(CFG.allowCod && /płatność przy odbiorze|platnosc przy odbiorze|za pobraniem|przy dostawie|przy odbiorze/i.test(reply)) ses.paymentMethod='cod';
+      if(/link do płatności pojawi|link do platnosci pojawi|betalingslink|online kartą|online karta|BLIK|kort/i.test(reply) && ses.paymentMethod!=='cod') ses.paymentMethod='stripe';
 
       addBot(reply);addTime();detectQR(reply);
 
@@ -765,8 +842,9 @@
       }
 
       // Лід в TG — ОДИН РАЗ, тільки коли є і контакт і підтвердження замовлення
-      const isConfirm=/przyjęłam zamówienie|pojawi się za chwilę|łącznie|razem:/i.test(reply);
+      const isConfirm=/przyjęłam zamówienie|przyjęłam zamowienie|pojawi się za chwilę|ordren er modtaget|betalingslink|linket til betaling|łącznie|razem:|i alt:/i.test(reply);
       if(isConfirm && (ses.phone||ses.email) && !ses.paymentLinkSent){
+        if(COUNTRY === 'DK' && !ses.paymentMethod) ses.paymentMethod='stripe';
         ses.paymentLinkSent=true;
         if(ses.paymentMethod==='cod'){
           const pNum=parseFloat(ses.price)||0;
@@ -782,7 +860,7 @@
       }
     }catch(e){
       el('sg-log').querySelector('.sg-typing')?.remove();
-      addBot('Brak połączenia. Proszę odświeżyć stronę.');
+      addBot(CFG.connectionError);
       if(!hasContactData()) scheduleSessionSave('idle_error_no_contact');
       else if(ses.paymentLinkSent) savePostPaymentUpdate('post_payment_error');
     }finally{
