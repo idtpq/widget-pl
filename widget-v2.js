@@ -567,9 +567,21 @@
   // Відправити зміну замовлення (НЕ новий лід)
   async function fireUpdate(changeType, extra={}){
     try{
+      const payload = {...buildLeadData(),...extra,change_type:changeType};
+
+      // Якщо клієнт змінив оплату на COD / за побранням,
+      // не передаємо Stripe link в /update, щоб він не прилітав у TG як активне посилання.
+      if(
+        payload.payment_method === 'cod' ||
+        String(changeType).toLowerCase().includes('cod') ||
+        String(changeType).toLowerCase().includes('pobraniem')
+      ){
+        delete payload.stripe_url;
+      }
+
       await fetch(WORKER_URL+'/update',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({...buildLeadData(),...extra,change_type:changeType}),
+        body:JSON.stringify(payload),
       });
       console.log('[SG] Update fired:',changeType);
     }catch(e){console.error('[SG] Update error:',e);}
