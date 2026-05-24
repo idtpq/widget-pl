@@ -24,6 +24,9 @@
     #sg-root{position:fixed;bottom:24px;right:24px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
     #sg-btn{width:58px;height:58px;border-radius:50%;background:#1c3d2e;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.22);transition:transform .2s,box-shadow .2s;position:relative;}
     #sg-btn:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.28);}
+    #sg-btn{animation:sg-chat-btn-pulse 1.9s ease-out infinite;}
+    #sg-btn:hover{animation-play-state:paused;}
+    @keyframes sg-chat-btn-pulse{0%{box-shadow:0 4px 16px rgba(0,0,0,.22),0 0 0 0 rgba(28,61,46,.45);}70%{box-shadow:0 4px 16px rgba(0,0,0,.22),0 0 0 13px rgba(28,61,46,0);}100%{box-shadow:0 4px 16px rgba(0,0,0,.22),0 0 0 0 rgba(28,61,46,0);}}
     #sg-btn svg{width:26px;height:26px;stroke:#fff;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round;}
     #sg-badge{position:absolute;top:-2px;right:-2px;width:18px;height:18px;border-radius:50%;background:#e53e3e;border:2px solid #fff;display:none;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;}
     #sg-tooltip{position:absolute;bottom:68px;right:0;background:#1c3d2e;color:#fff;font-size:13px;padding:10px 14px;border-radius:12px 12px 0 12px;white-space:nowrap;box-shadow:0 4px 16px rgba(0,0,0,.2);display:none;cursor:pointer;line-height:1.4;}
@@ -299,6 +302,34 @@
     return addr || null;
   }
 
+
+  function getNameFromAddressValue(addr){
+    const raw = String(addr||'').trim();
+    if(!raw) return null;
+
+    let first = raw.split(',')[0] || '';
+    first = first
+      .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g,' ')
+      .replace(/(?:tel\.?|telefon|phone|nr\.?\s*tel\.?)\s*[:.]?/ig,' ')
+      .replace(/(\+48[\s-]?)?[4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3}/g,' ')
+      .replace(/\b(ul\.?|ulica|al\.?|aleja)\b[\s\S]*$/i,' ')
+      .replace(/\d{2}-\d{3}[\s\S]*$/,' ')
+      .replace(/[^A-Za-zżźćąśęłóńŻŹĆĄŚĘŁÓŃ .'-]/g,' ')
+      .replace(/\s+/g,' ')
+      .trim();
+
+    const words = first.split(/\s+/).filter(Boolean).slice(0,3);
+    if(words.length < 2) return null;
+    if(words.some(w => w.length < 2 || NOT_NAMES.has(w.toLowerCase()) || /mm|cm|zł/i.test(w))) return null;
+
+    const name = words.join(' ');
+    return isBadName(name) ? null : name;
+  }
+
+  function getNameFromBotAddress(t){
+    return getNameFromAddressValue(getAddressFromBot(t));
+  }
+
   function cleanMoney(v){
     return String(v||'').replace(/\s+/g,'').replace(',', '.');
   }
@@ -492,6 +523,9 @@
       total = String(delivery === 'gratis' ? pNum : pNum + (parseFloat(delivery)||0));
     }
     if(total) ses.total = String(total);
+
+    const derivedName = (!ses.name || isBadName(ses.name)) ? getNameFromAddressValue(ses.address) : null;
+    if(derivedName) ses.name = derivedName;
 
     return{
       session_id:SID,
@@ -708,13 +742,14 @@
       const reply=data.content?.[0]?.text||'Przepraszamy, spróbuj ponownie.';
       hist.push({role:'assistant',content:reply});
 
-      const price=getPrice(reply),totalParsed=getTotal(reply),deliveryParsed=getDelivery(reply),product=getProduct(reply),nameBot=getNameFromBot(reply),addrBot=getAddressFromBot(reply);
+      const price=getPrice(reply),totalParsed=getTotal(reply),deliveryParsed=getDelivery(reply),product=getProduct(reply),nameBot=getNameFromBot(reply),addrBot=getAddressFromBot(reply),nameAddr=getNameFromBotAddress(reply);
       if(price)ses.price=price;
       if(totalParsed)ses.total=totalParsed;
       if(deliveryParsed)ses.delivery=deliveryParsed;
       if(product)ses.product=product;
       if(nameBot && (!ses.name || isBadName(ses.name))) ses.name=nameBot;
       if(addrBot)ses.address=addrBot;
+      if(nameAddr && (!ses.name || isBadName(ses.name))) ses.name=nameAddr;
       if(/płatność przy odbiorze|platnosc przy odbiorze|za pobraniem|przy dostawie|przy odbiorze/i.test(reply)) ses.paymentMethod='cod';
       if(/link do płatności pojawi|link do platnosci pojawi|online kartą|online karta|BLIK/i.test(reply) && ses.paymentMethod!=='cod') ses.paymentMethod='stripe';
 
@@ -756,16 +791,16 @@
   }
 
   function autoOpen(){
+    // Автовідкриття чату вимкнено.
+    // Залишається тільки повідомлення біля іконки чату.
     if(sessionStorage.getItem('sg_v'))return;
     setTimeout(()=>{
       if(!open){
-        const t=el('sg-tooltip');t.style.display='block';
-        setTimeout(()=>{if(!open)t.style.display='none';},8000);
+        const t=el('sg-tooltip');
+        t.style.display='block';
+        sessionStorage.setItem('sg_v','1');
       }
     },20000);
-    setTimeout(()=>{
-      if(!open){sessionStorage.setItem('sg_v','1');el('sg-tooltip').style.display='none';openChat();}
-    },35000);
   }
 
   function init(){
