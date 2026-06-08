@@ -277,6 +277,7 @@
     el('sg-ta').focus();
   }
   function closeChat(){
+    sessionStorage.setItem('sg_auto_block','1');
     open=false;el('sg-box').classList.add('hidden');
     // Якщо клієнт не залишив контакт і закрив чат — зберігаємо покинутий діалог без очікування.
     // Якщо контакт уже є — не дублюємо Google Sheets, лід піде окремо після підтвердження замовлення.
@@ -829,24 +830,31 @@
   }
 
   function autoOpen(){
-    // Автовідкриття чату вимкнено.
-    // Залишається тільки повідомлення біля іконки чату.
-    if(sessionStorage.getItem('sg_v'))return;
+    // Польща: спочатку показуємо повідомлення біля іконки, потім автоматично відкриваємо чат через 50 секунд.
+    // Якщо клієнт сам відкрив/закрив чат — більше автоматично не відкриваємо, щоб не дратувати.
+    if(sessionStorage.getItem('sg_auto_done') || sessionStorage.getItem('sg_auto_block')) return;
+
     setTimeout(()=>{
-      if(!open){
+      if(!open && !sessionStorage.getItem('sg_auto_block')){
         const t=el('sg-tooltip');
-        t.style.display='block';
-        sessionStorage.setItem('sg_v','1');
+        if(t) t.style.display='block';
       }
-    },20000);
+    },8000);
+
+    setTimeout(()=>{
+      if(!open && !sessionStorage.getItem('sg_auto_block')){
+        sessionStorage.setItem('sg_auto_done','1');
+        openChat();
+      }
+    },50000);
   }
 
   function init(){
     build();
-    el('sg-btn').addEventListener('click',()=>open?closeChat():openChat());
+    el('sg-btn').addEventListener('click',()=>{sessionStorage.setItem('sg_auto_block','1');open?closeChat():openChat();});
     el('sg-x').addEventListener('click',closeChat);
     el('sg-go').addEventListener('click',()=>send());
-    el('sg-tooltip').addEventListener('click',()=>openChat());
+    el('sg-tooltip').addEventListener('click',()=>{sessionStorage.setItem('sg_auto_block','1');openChat();});
     el('sg-ta').addEventListener('keydown',e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();}});
     el('sg-ta').addEventListener('input',function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,80)+'px';});
     autoOpen();
