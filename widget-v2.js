@@ -94,6 +94,7 @@
     paymentMethod:null,total:null,delivery:null,stripeUrl:null,
     // Стан відправки
     leadFired:false,        // лід відправлено в TG один раз
+    phoneRequest:false,     // клієнт просить контакт / замовлення телефоном
     paymentLinkSent:false,  // Stripe link згенеровано
     pendingAddressParts:[], // частини адреси, якщо клієнт пише її кількома повідомленнями
     sessionSavedOnce:false, // чи вже була створена/оновлена сесія в Sheets
@@ -290,7 +291,7 @@
   function getPhone(t){const m=t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);return m?m[0].replace(/[\s-]/g,''):null;}
   function getEmail(t){const m=t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:null;}
   // Слова які НЕ є іменами
-  const NOT_NAMES = new Set(['chcę','mam','tak','nie','intensywnie','rzadziej','drewno','szkło','laminat','online','pobraniem','zamówienie','okrągły','prostokątny','mocniejsze','tańsze','oblicz','inne','jeszcze','czy','jak','jaki','jakie','które','gdzie','kiedy','proszę','dziękuję','świetnie','dobrze','rozumiem','oczywiście','pewnie']);
+  const NOT_NAMES = new Set(['chcę','chce','mam','tak','nie','intensywnie','rzadziej','drewno','szkło','szklo','laminat','online','pobraniem','zamówienie','zamowienie','okrągły','okragly','prostokątny','prostokatny','mocniejsze','tańsze','tansze','oblicz','inne','jeszcze','czy','jak','jaki','jakie','ktore','które','gdzie','kiedy','proszę','prosze','dziękuję','dziekuje','świetnie','dobrze','rozumiem','oczywiście','pewnie','interesuje','mnie','sam','dotne','dotnę','wolę','wole','kontakt','telefoniczny','efoniczny','jaka','ile','kosztuje','potrzebuję','potrzebuje','posiadam','mój','moj','stoł','stół','stol','kwadrat','brzegi','szafka','szfka','kuchenna']);
   // Тексти кнопок / короткі відповіді, які не мають потрапляти в адресу
   const ADDR_EXCLUDE = /^(?:🛒\s*)?Chcę zamówić$|^(?:❓\s*)?Mam pytanie$|^Drewno matowe$|^Szkło\s*\/\s*lakier\s*\/\s*połysk$|^Laminat$|^Intensywnie\s*\(kuchnia\/dzieci\)$|^Rzadziej\s*\(biurko\/salon\)$|^1\.5mm\s*—\s*tańsze$|^2mm\s*—\s*mocniejsze$|^Tak,\s*okrągły$|^Nie,\s*prostokątny$|^Tak,\s*mam jeszcze$|^Nie,\s*to wszystko$|^(?:💳\s*)?Online\s*\(karta\/BLIK\)$|^(?:🚚\s*)?Za pobraniem$/i;
 
@@ -437,12 +438,38 @@
     return productLines.length ? productLines.map(l=>l.replace(/^[-—•▪■]\s*/, '').trim()).join(' | ') : null;
   }
 
+
+  const BAD_NAME_RE = /\b(interesuje\s+mnie|szukam|sam\s+dotn[eę]|wol[eę]\s+kontakt|kontakt\s+telefoniczny|telefoniczny|efoniczny|st[óo]ł|stol|kwadrat|prostok[ąa]t|okr[ąa]g|brzegi|szafka|szfka|kuchenna|jaka\s+jest|jaka\s+cena|ile\s+kosztuje|potrzebuj[eę]|posiadam|m[óo]j\s+st[óo]ł|dzie[nń]\s+dobry|czy\s+|to\s+jest|nie\s+mam|co\s+to|znikn[eę]ła|płatno|dostaw|adres|wymiar|grubo[śs][ćc]|produkt)\b/i;
+
+  function titleCaseName(name){
+    return String(name||'')
+      .split(/\s+/)
+      .filter(Boolean)
+      .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+      .join(' ');
+  }
+
+  function cleanFinalName(name){
+    const n = String(name||'').trim().replace(/\s+/g,' ');
+    if(!n || isBadName(n)) return '';
+    return titleCaseName(n);
+  }
+
+  function wantsPhoneContact(text){
+    const s = String(text||'').toLowerCase();
+    return /(zam[oó]wi[eę]\s+telefonicznie|kontakt\s+telefoniczny|wol[eę]\s+kontakt|prosz[eę]\s+o\s+kontakt|prosz[eę]\s+zadzwoni[ćc]|oddzwo[nń]|zadzwo[nń]|zam[oó]wienie\s+tel|przez\s+telefon|telefonicznie)/i.test(s);
+  }
+
   function isBadName(n){
     const v = String(n||'').trim().toLowerCase();
     if(!v) return true;
-    if(/szukam|ochron|st[óo]ł|kwadrat|prostok[ąa]t|okr[ąa]g|drewno|laminat|kuchnia|salon|biurko|wymiar|zam[óo]wi|pytanie|produkt|grubość|płatno|dostaw|adres/i.test(v)) return true;
-    const parts = v.split(/\s+/);
-    return parts.some(p => NOT_NAMES.has(p));
+    if(BAD_NAME_RE.test(v)) return true;
+    if(/[,@0-9]/.test(v)) return true;
+    const parts = v.split(/\s+/).filter(Boolean);
+    if(parts.length < 2 || parts.length > 3) return true;
+    if(parts.some(p => NOT_NAMES.has(p) || p.length < 2 || /mm|cm|zł|zl/i.test(p))) return true;
+    if(!/^[a-ząćęłńóśźż .'-]+$/i.test(v)) return true;
+    return false;
   }
 
   function cleanNameCandidate(t){
@@ -522,7 +549,7 @@
 
     return null;
   }
-  function getNameFromBot(t){const m=t.match(/Dziękuję[,!\s]+([A-ZŻŹĆĄŚĘŁÓŃ][a-zżźćąśęłóń]{2,})/);return m?m[1]:null;}
+  function getNameFromBot(t){ return null; }
   function buildSummary(){return hist.filter(m=>m.role==='user').slice(-4).map(m=>m.content.slice(0,80)).join(' | ');}
   function buildFullChat(){return hist.map(m=>(m.role==='user'?'👤 ':'🤖 ')+m.content).join('\n---\n');}
 
@@ -563,15 +590,18 @@
 
     const derivedName = (!ses.name || isBadName(ses.name)) ? getNameFromAddressValue(ses.address) : null;
     if(derivedName) ses.name = derivedName;
+    if(ses.name && isBadName(ses.name)) ses.name = '';
+    const finalName = cleanFinalName(ses.name);
 
     return{
       session_id:SID,
-      name:ses.name||'',
+      request_type:ses.phoneRequest ? 'phone_request' : '',
+      name:finalName,
       phone:ses.phone||'',
       email:ses.email||'',
       contact:ses.contact||'',
-      product:ses.product||'',
-      product_formatted:formatProductForTG(),
+      product:ses.product || (ses.phoneRequest ? 'Prośba o kontakt telefoniczny' : ''),
+      product_formatted:ses.phoneRequest && !ses.product ? '📞 Prośba o kontakt telefoniczny' : formatProductForTG(),
       price:ses.price||'',
       delivery,
       total:ses.total||'',
@@ -588,14 +618,14 @@
   }
 
   // Відправити лід в TG — ТІЛЬКИ ОДИН РАЗ за сесію
-  async function fireLead(){
+  async function fireLead(extra={}){
     if(ses.leadFired)return;
-    if(!ses.phone&&!ses.email)return; // без контакту не відправляємо
+    if(!ses.phone&&!ses.email&&!ses.contact)return; // без контакту не відправляємо
     ses.leadFired=true;
     try{
       await fetch(WORKER_URL+'/lead',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(buildLeadData()),
+        body:JSON.stringify(buildLeadData(extra)),
       });
       console.log('[SG] Lead fired once, ID:',SID);
     }catch(e){console.error('[SG] Lead error:',e);}
@@ -716,6 +746,9 @@
     clearSessionTimer();
     addUser(text);showTyping();
 
+    // Phone contact request detection
+    if(wantsPhoneContact(text)) ses.phoneRequest = true;
+
     // Payment method detection
     if(/za pobraniem|pobraniem|przy dostawie|przy odbiorze|płatność przy odbiorze|platnosc przy odbiorze|gotówką|gotowką|gotowka|odbiór/i.test(text)) ses.paymentMethod='cod';
     if(/online|karta|blik|przelew|zapłać|zaplac/i.test(text)) ses.paymentMethod='stripe';
@@ -764,6 +797,12 @@
 
     hist.push({role:'user',content:text});
 
+    // Якщо клієнт просить контакт/замовлення телефоном і дав номер — одразу передаємо це в Telegram.
+    if(ses.phoneRequest && (ses.phone || ses.contact) && !ses.leadFired){
+      if(!ses.product) ses.product = 'Prośba o kontakt telefoniczny';
+      await fireLead({status:'phone_request', request_type:'phone_request'}); // phone_request надіслано
+    }
+
     // Не пишемо кожне повідомлення в Google Sheets.
     // До контакту — ставимо таймер 60 секунд. Після оплати — оновлюємо тільки якщо клієнт пише/змінює щось уже після вибору методу оплати.
     if(!hasContactData()){
@@ -789,6 +828,7 @@
       if(nameBot && (!ses.name || isBadName(ses.name))) ses.name=nameBot;
       if(addrBot)ses.address=addrBot;
       if(nameAddr && (!ses.name || isBadName(ses.name))) ses.name=nameAddr;
+      if(/kontakt telefoniczny|oddzwonimy|zadzwonimy|numer telefonu/i.test(reply)) ses.phoneRequest = true;
       if(/płatność przy odbiorze|platnosc przy odbiorze|za pobraniem|przy dostawie|przy odbiorze/i.test(reply)) ses.paymentMethod='cod';
       if(/link do płatności pojawi|link do platnosci pojawi|online kartą|online karta|BLIK/i.test(reply) && ses.paymentMethod!=='cod') ses.paymentMethod='stripe';
 
