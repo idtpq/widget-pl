@@ -288,7 +288,18 @@
   }
 
   // Data extraction
-  function getPhone(t){const m=t.match(/(\+48[\s-]?)?([4-9]\d{2}[\s-]?\d{3}[\s-]?\d{3})/);return m?m[0].replace(/[\s-]/g,''):null;}
+  function getPhone(t){
+    const raw = String(t || '');
+    // Приймаємо:
+    // +48XXXXXXXXX / +48 XXX XXX XXX — навіть якщо це тестовий номер.
+    // Також приймаємо польський 9-значний номер без +48.
+    // Не чіпаємо розміри типу 120x80, бо там немає 9 цифр підряд у форматі телефону.
+    const m = raw.match(/(?:\+48[\s-]?)?([0-9]{3}[\s-]?[0-9]{3}[\s-]?[0-9]{3})/);
+    if(!m) return null;
+    const normalized = m[0].replace(/[\s-]/g,'');
+    // Якщо клієнт написав номер без +48 — лишаємо як є, щоб у TG було так, як він ввів.
+    return normalized;
+  }
   function getEmail(t){const m=t.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/);return m?m[0]:null;}
   // Слова які НЕ є іменами
   const NOT_NAMES = new Set(['chcę','chce','mam','tak','nie','intensywnie','rzadziej','drewno','szkło','szklo','laminat','online','pobraniem','zamówienie','zamowienie','okrągły','okragly','prostokątny','prostokatny','mocniejsze','tańsze','tansze','oblicz','inne','jeszcze','czy','jak','jaki','jakie','ktore','które','gdzie','kiedy','proszę','prosze','dziękuję','dziekuje','świetnie','dobrze','rozumiem','oczywiście','pewnie','interesuje','mnie','sam','dotne','dotnę','wolę','wole','kontakt','telefoniczny','efoniczny','jaka','ile','kosztuje','potrzebuję','potrzebuje','posiadam','mój','moj','stoł','stół','stol','kwadrat','brzegi','szafka','szfka','kuchenna']);
