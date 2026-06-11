@@ -61,16 +61,16 @@
     .sg-qbtn{background:#fff;border:1.5px solid #1c3d2e;color:#1c3d2e;border-radius:20px;padding:6px 13px;font-size:13px;cursor:pointer;transition:all .15s;font-family:inherit;line-height:1.3;}
     .sg-qbtn:hover{background:#1c3d2e;color:#fff;}
     .sg-pay-wrap{display:flex;justify-content:center;padding:8px 0;}
-    .sg-pay-btn{display:inline-flex;align-items:center;justify-content:center;gap:10px;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;text-decoration:none;padding:14px 20px;border-radius:16px;font-size:18px;font-weight:800;letter-spacing:-0.01em;box-shadow:0 10px 26px rgba(0,0,0,.18);transition:transform .15s,box-shadow .15s,filter .15s;min-width:286px;border:2px solid #171717;}
-    .sg-pay-btn:hover{transform:translateY(-1px);box-shadow:0 14px 30px rgba(0,0,0,.22);filter:brightness(1.03);}
-    .sg-pay-btn .sg-blik-logo{display:inline-flex;align-items:center;justify-content:center;background:#fff;border-radius:10px;padding:4px 8px;line-height:1;box-shadow:0 0 0 1px rgba(255,255,255,.12);}
-    .sg-pay-btn .sg-blik-logo-img{display:block;height:22px;width:auto;}
-    .sg-pay-btn .sg-pay-amount{font-size:19px;font-weight:900;color:#fff;white-space:nowrap;}
+    .sg-pay-btn{display:inline-flex;align-items:center;justify-content:center;gap:9px;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;text-decoration:none;padding:11px 15px;border-radius:14px;font-size:16px;font-weight:800;letter-spacing:-0.01em;box-shadow:0 8px 20px rgba(0,0,0,.16);transition:transform .15s,box-shadow .15s,filter .15s;min-width:218px;max-width:100%;border:1.5px solid #171717;}
+    .sg-pay-btn:hover{transform:translateY(-1px);box-shadow:0 10px 24px rgba(0,0,0,.20);filter:brightness(1.03);}
+    .sg-pay-btn .sg-blik-logo{display:inline-flex;align-items:center;justify-content:center;background:#fff;border-radius:8px;padding:3px 7px;line-height:1;box-shadow:0 0 0 1px rgba(255,255,255,.12);}
+    .sg-pay-btn .sg-blik-logo-img{display:block;height:17px;width:auto;}
+    .sg-pay-btn .sg-pay-amount{font-size:17px;font-weight:900;color:#fff;white-space:nowrap;}
     .sg-pay-note{font-size:12px;color:#6b7280;text-align:center;margin-top:2px;}
     .sg-pay-loading{margin:8px 12px;padding:14px 14px;border-radius:14px;background:#f7f7f5;border:1px solid #ece7de;}
     .sg-pay-loading-top{font-size:13px;color:#374151;line-height:1.45;margin-bottom:10px;text-align:center;}
-    .sg-pay-loading-btn{display:flex;align-items:center;justify-content:center;gap:12px;min-width:286px;margin:0 auto;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;border-radius:16px;padding:14px 20px;border:2px solid #171717;opacity:.92;}
-    .sg-pay-loading-spinner{width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,255,255,.28);border-top-color:#ffffff;animation:sg-spin .8s linear infinite;}
+    .sg-pay-loading-btn{display:flex;align-items:center;justify-content:center;gap:10px;min-width:218px;max-width:100%;margin:0 auto;background:linear-gradient(180deg,#1a1a1a 0%,#0d0d0d 100%);color:#fff;border-radius:14px;padding:11px 15px;border:1.5px solid #171717;opacity:.92;}
+    .sg-pay-loading-spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.28);border-top-color:#ffffff;animation:sg-spin .8s linear infinite;}
     @keyframes sg-spin{to{transform:rotate(360deg);}}
     .sg-cod-box{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px 14px;font-size:13px;color:#15803d;text-align:center;margin:4px 12px;}
     #sg-ft{display:flex;gap:8px;padding:10px 12px;border-top:1px solid #ede8e0;background:#fff;flex-shrink:0;align-items:flex-end;}
@@ -632,13 +632,20 @@
   async function fireLead(extra={}){
     if(ses.leadFired)return;
     if(!ses.phone&&!ses.email&&!ses.contact)return; // без контакту не відправляємо
-    ses.leadFired=true;
     try{
-      await fetch(WORKER_URL+'/lead',{
+      const payload = buildLeadData(extra);
+      const res = await fetch(WORKER_URL+'/lead',{
         method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify(buildLeadData(extra)),
+        body:JSON.stringify(payload),
       });
-      console.log('[SG] Lead fired once, ID:',SID);
+      let data = {};
+      try{ data = await res.json(); }catch(_){}
+      if(res.ok && data.ok !== false){
+        ses.leadFired=true;
+        console.log('[SG] Lead fired once, ID:',SID);
+      } else {
+        console.error('[SG] Lead failed:', data.error || res.status, payload);
+      }
     }catch(e){console.error('[SG] Lead error:',e);}
   }
 
