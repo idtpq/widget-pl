@@ -91,6 +91,7 @@
   let hist=[];
   let ses={
     name:null,phone:null,email:null,contact:null,circleSize:null,
+    thickness:null,
     price:null,product:null,address:null,
     paymentMethod:null,total:null,delivery:null,stripeUrl:null,
     leadFired:false,
@@ -426,6 +427,25 @@
   // Викликається лише коли ses.product порожній (немає класичного підсумку з
   // buletами). Збирає всі унікальні розміри з історії, щоб у TG/Sheets/Base
   // не падало "уточнięться".
+  // ── FIX: визначення товщини з будь-якого тексту ────────────────────────────
+  // Повертає 'ryflowane 1.5mm' / 'błyszczące 2mm' / 'błyszczące 1.5mm' / 'wyprzedaż'
+  // або null, якщо у тексті немає сигналу про варіант.
+  function detectThickness(text){
+    const s=String(text||'').toLowerCase();
+    if(/wyprzeda[żz]|outlet|-50%/.test(s))return 'wyprzedaż -50%';
+    const ryf=/ryflowane|ryflowany|ryflo/.test(s);
+    if(/2\s*mm|2mm|2\.0\s*mm|mocniejsz/.test(s))return ryf?'ryflowane 2mm':'błyszczące 2mm';
+    if(/1[\s.,]*5\s*mm|1\.5mm|1,5mm|ta[ńn]sz|cie[ńn]sz/.test(s))return ryf?'ryflowane 1.5mm':'błyszczące 1.5mm';
+    if(ryf)return 'ryflowane 1.5mm'; // ryflowane domyślnie 1.5mm
+    return null;
+  }
+
+  // Спробувати оновити ses.thickness з тексту (клієнта або бота)
+  function captureThickness(text){
+    const t=detectThickness(text);
+    if(t)ses.thickness=t;
+  }
+
   function getDimsFallback(){
     // ВАЖЛИВО: скануємо ТІЛЬКИ повідомлення клієнта, не бота —
     // інакше у товар потраплять приклади з підказки ("np. 120×80, 150×150").
@@ -453,7 +473,16 @@
       if(idx>=0)all[idx]='okrąg ⌀'+d+' cm';
       all=[...new Set(all)];
     }
-    return all.length?all.join(' | '):null;
+    if(!all.length)return null;
+    // FIX: доклеюємо форму (Prostokąt/Okrąg) + товщину, щоб товщина завжди долітала.
+    const th=ses.thickness?(', '+ses.thickness):'';
+    return all.map(dim=>{
+      if(dim.indexOf('okrąg')===0||dim.indexOf('⌀')>=0){
+        const d=(dim.match(/(\d{2,4})/)||[])[1]||'';
+        return 'Okrąg śr. '+d+' cm'+th;
+      }
+      return 'Prostokąt '+dim+th;
+    }).join(' | ');
   }
 
   const BAD_NAME_RE=/\b(interesuje\s+mnie|szukam|sam\s+dotn[eę]|wol[eę]\s+kontakt|kontakt\s+telefoniczny|telefoniczny|efoniczny|st[óo]ł|stol|kwadrat|prostok[ąa]t|okr[ąa]g|brzegi|szafka|szfka|kuchenna|jaka\s+jest|jaka\s+cena|ile\s+kosztuje|potrzebuj[eę]|posiadam|m[óo]j\s+st[óo]ł|dzie[nń]\s+dobry|czy\s+|to\s+jest|nie\s+mam|co\s+to|znikn[eę]ła|płatno|dostaw|adres|wymiar|grubo[śs][ćc]|produkt)\b/i;
@@ -717,6 +746,7 @@
     }
 
     const phone=getPhone(text),email=getEmail(text),name=getName(text),addr=getAddress(text);
+    captureThickness(text); // FIX: товщина з повідомлення клієнта (кнопки "2mm", "1.5mm — tańsze" тощо)
     if(phone&&!ses.phone)ses.phone=phone;
     if(email&&!ses.email)ses.email=email;
     if(name&&(!ses.name||isBadName(ses.name)))ses.name=name;
@@ -740,6 +770,7 @@
       hist.push({role:'assistant',content:reply});
 
       const price=getPrice(reply),totalParsed=getTotal(reply),deliveryParsed=getDelivery(reply),product=getProduct(reply),addrBot=getAddressFromBot(reply),nameAddr=getNameFromBotAddress(reply);
+      captureThickness(reply); // FIX: товщина з рекомендації/підсумку бота
       if(price)ses.price=price;
       if(totalParsed)ses.total=totalParsed;
       if(deliveryParsed)ses.delivery=deliveryParsed;
