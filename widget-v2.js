@@ -431,14 +431,25 @@
   // buletами). Збирає всі унікальні розміри з історії, щоб у TG/Sheets/Base
   // не падало "уточнięться".
   function getDimsFallback(){
-    const allText=hist.map(m=>m.content).join('\n');
-    // прямокутники / квадрати: 120×80 cm, 81x40 cm, 150х150 cm
-    const dims=[...allText.matchAll(/(\d{2,4})\s*[xX×х]\s*(\d{2,4})\s*cm/gi)]
-      .map(m=>m[1]+'×'+m[2]+' cm');
+    // ВАЖЛИВО: скануємо ТІЛЬКИ повідомлення клієнта, не бота —
+    // інакше у товар потраплять приклади з підказки ("np. 120×80, 150×150").
+    const userText=hist.filter(m=>m.role==='user').map(m=>m.content).join('\n');
+    const found=[];
+    const pushDim=(w,h)=>{
+      w=parseInt(w,10);h=parseInt(h,10);
+      // правдоподібні розміри столу (відсікаємо ціни/телефони/"×2 szt")
+      if(!(w>=20&&w<=2000&&h>=20&&h<=2000))return;
+      found.push(w+'×'+h+' cm');
+    };
+    // 1) з "cm": 120×80 cm, 81x40 cm, 150х150 cm
+    for(const m of userText.matchAll(/(\d{2,4})\s*[xX×х\/]\s*(\d{2,4})\s*cm/gi))pushDim(m[1],m[2]);
+    // 2) БЕЗ "cm": 120x80, 120 × 80, 120/80, 120 na 80
+    //    (запобіжники: число не приклеєне до інших цифр — щоб не ловити телефон/ціну)
+    for(const m of userText.matchAll(/(?:^|[^\d.,])(\d{2,4})\s*(?:[xX×х\/]|na)\s*(\d{2,4})(?![\d.,])/gi))pushDim(m[1],m[2]);
     // круги: okrąg ⌀90 cm, śr. 90 cm, średnica 90 cm
-    const circles=[...allText.matchAll(/(?:okr[ąa]g|śr\.?|średnica|srednica)\s*[⌀]?\s*(\d{2,4})\s*cm/gi)]
+    const circles=[...userText.matchAll(/(?:okr[ąa]g|śr\.?|średnica|srednica)\s*[⌀]?\s*(\d{2,4})\s*cm?/gi)]
       .map(m=>'okrąg ⌀'+m[1]+' cm');
-    let all=[...new Set([...dims,...circles])];
+    let all=[...new Set([...found,...circles])];
     // якщо клієнт обрав "okrągły" для квадрата — підмінити квадрат на круг
     if(ses.circleSize){
       const d=ses.circleSize;
