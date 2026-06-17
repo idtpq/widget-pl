@@ -1,4 +1,7 @@
 // Elastyczne Szkło — Chat Widget v2 (fast flow, warm lead, 30s open)
+// FIX 2026-06-17: товар/розміри більше не падають у "уточнюється" —
+// додано getDimsFallback(), який витягує розміри з усього діалогу,
+// якщо бот не показав класичного підсумку з buletами.
 (function () {
   'use strict';
 
@@ -423,6 +426,29 @@
     return productLines.length?productLines.map(l=>l.replace(/^[-—•▪■]\s*/,'').trim()).join(' | '):null;
   }
 
+  // ── FIX: fallback товару з усього діалогу ──────────────────────────────────
+  // Викликається лише коли ses.product порожній (немає класичного підсумку з
+  // buletами). Збирає всі унікальні розміри з історії, щоб у TG/Sheets/Base
+  // не падало "уточнięться".
+  function getDimsFallback(){
+    const allText=hist.map(m=>m.content).join('\n');
+    // прямокутники / квадрати: 120×80 cm, 81x40 cm, 150х150 cm
+    const dims=[...allText.matchAll(/(\d{2,4})\s*[xX×х]\s*(\d{2,4})\s*cm/gi)]
+      .map(m=>m[1]+'×'+m[2]+' cm');
+    // круги: okrąg ⌀90 cm, śr. 90 cm, średnica 90 cm
+    const circles=[...allText.matchAll(/(?:okr[ąa]g|śr\.?|średnica|srednica)\s*[⌀]?\s*(\d{2,4})\s*cm/gi)]
+      .map(m=>'okrąg ⌀'+m[1]+' cm');
+    let all=[...new Set([...dims,...circles])];
+    // якщо клієнт обрав "okrągły" для квадрата — підмінити квадрат на круг
+    if(ses.circleSize){
+      const d=ses.circleSize;
+      const idx=all.indexOf(d+'×'+d+' cm');
+      if(idx>=0)all[idx]='okrąg ⌀'+d+' cm';
+      all=[...new Set(all)];
+    }
+    return all.length?all.join(' | '):null;
+  }
+
   const BAD_NAME_RE=/\b(interesuje\s+mnie|szukam|sam\s+dotn[eę]|wol[eę]\s+kontakt|kontakt\s+telefoniczny|telefoniczny|efoniczny|st[óo]ł|stol|kwadrat|prostok[ąa]t|okr[ąa]g|brzegi|szafka|szfka|kuchenna|jaka\s+jest|jaka\s+cena|ile\s+kosztuje|potrzebuj[eę]|posiadam|m[óo]j\s+st[óo]ł|dzie[nń]\s+dobry|czy\s+|to\s+jest|nie\s+mam|co\s+to|znikn[eę]ła|płatno|dostaw|adres|wymiar|grubo[śs][ćc]|produkt)\b/i;
 
   function titleCaseName(name){
@@ -499,8 +525,10 @@
   function buildFullChat(){return hist.map(m=>(m.role==='user'?'👤 ':'🤖 ')+m.content).join('\n---\n');}
 
   function formatProductForTG(){
-    if(!ses.product)return'уточнюється';
-    const lines=ses.product.split('|').map(p=>p.trim()).filter(Boolean);
+    // FIX: якщо немає ses.product — пробуємо fallback з усього діалогу
+    const src=ses.product||getDimsFallback();
+    if(!src)return'уточнюється';
+    const lines=src.split('|').map(p=>p.trim()).filter(Boolean);
     return lines.map(p=>{
       const isCircle=p.includes('okrąg')||p.includes('⌀');
       const icon=isCircle?'⭕':'▪️';
@@ -527,7 +555,8 @@
       phone:ses.phone||'',
       email:ses.email||'',
       contact:ses.contact||'',
-      product:ses.product||(ses.phoneRequest?'Prośba o kontakt telefoniczny':''),
+      // FIX: product теж підстраховано fallback'ом
+      product:ses.product||getDimsFallback()||(ses.phoneRequest?'Prośba o kontakt telefoniczny':''),
       product_formatted:ses.phoneRequest&&!ses.product?'📞 Prośba o kontakt telefoniczny':formatProductForTG(),
       price:ses.price||'',
       delivery,
@@ -626,7 +655,7 @@
       if(deliveryVal)ses.delivery=deliveryVal;
       const finalTotal=ses.total||parsedTotal||String(deliveryVal==='gratis'?pNum:pNum+(parseFloat(deliveryVal)||0));
       ses.total=String(finalTotal);
-      const paymentPayload=buildLeadData({product:ses.product||'Elastyczne szkło',product_formatted:formatProductForTG(),total:finalTotal,payment_method:'stripe',contact:ses.email||ses.phone||ses.contact||''});
+      const paymentPayload=buildLeadData({product:ses.product||getDimsFallback()||'Elastyczne szkło',product_formatted:formatProductForTG(),total:finalTotal,payment_method:'stripe',contact:ses.email||ses.phone||ses.contact||''});
       showPaymentLoading(finalTotal);
       const res=await fetch(WORKER_URL+'/payment',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(paymentPayload)});
       const d=await res.json();
