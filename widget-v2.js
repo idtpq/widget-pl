@@ -1,3 +1,7 @@
+// Elastyczne Szkło — Chat Widget v2 (fast flow, warm lead, 30s open)
+// FIX 2026-06-17: товар/розміри більше не падають у "уточнюється" —
+// додано getDimsFallback(), який витягує розміри з усього діалогу,
+// якщо бот не показав класичного підсумку з buletами.
 (function () {
   'use strict';
 
@@ -576,9 +580,18 @@
   function buildLeadData(extra={}){
     const utm=getUTM();
     const pNum=parseFloat(ses.price)||0;
-    let delivery=ses.delivery||(pNum>=500?'gratis':'18');
-    let total=ses.total;
-    if(!total&&pNum>0)total=String(delivery==='gratis'?pNum:pNum+(parseFloat(delivery)||0));
+    // FIX: dostawa ZAWSZE liczona z wartości szkła, NIGDY z tego co napisał bot.
+    // Gratis tylko gdy szkło >= 500 zł, inaczej 18 zł. Łącznie = szkło + dostawa.
+    let delivery;
+    let total;
+    if(pNum>0){
+      delivery=pNum>=500?'gratis':'18';
+      total=String(delivery==='gratis'?pNum:pNum+18);
+    }else{
+      delivery=ses.delivery||'18';
+      total=ses.total||'';
+    }
+    if(delivery)ses.delivery=delivery;
     if(total)ses.total=String(total);
     const derivedName=(!ses.name||isBadName(ses.name))?getNameFromAddressValue(ses.address):null;
     if(derivedName)ses.name=derivedName;
@@ -687,9 +700,13 @@
       const lastBot=hist.filter(m=>m.role==='assistant').slice(-1)[0]?.content||'';
       const pNum=parseFloat(ses.price)||0;
       const parsedTotal=getTotal(lastBot);
-      const deliveryVal=ses.delivery||getDelivery(lastBot)||(pNum>=500?'gratis':'18');
-      if(deliveryVal)ses.delivery=deliveryVal;
-      const finalTotal=ses.total||parsedTotal||String(deliveryVal==='gratis'?pNum:pNum+(parseFloat(deliveryVal)||0));
+      // FIX: deterministyczna dostawa i suma — nie ufamy "GRATIS/Łącznie" z bota.
+      // Gratis tylko gdy szkło >= 500 zł, inaczej dodaj 18 zł do kwoty pobieranej przez Stripe.
+      const deliveryVal=pNum>0?(pNum>=500?'gratis':'18'):(ses.delivery||'18');
+      ses.delivery=deliveryVal;
+      const finalTotal=pNum>0
+        ? String(deliveryVal==='gratis'?pNum:pNum+18)
+        : (ses.total||parsedTotal||'');
       ses.total=String(finalTotal);
       const paymentPayload=buildLeadData({product:ses.product||getDimsFallback()||'Elastyczne szkło',product_formatted:formatProductForTG(),total:finalTotal,payment_method:'stripe',contact:ses.email||ses.phone||ses.contact||''});
       showPaymentLoading(finalTotal);
@@ -735,8 +752,8 @@
     if(ses.paymentLinkSent&&ses.paymentMethod!=='cod'&&/pobraniem|zmienić.*met|cod|za pobraniem/i.test(text)){
       ses.paymentMethod='cod';
       const pNum=parseFloat(ses.price)||0;
-      const deliveryVal=ses.delivery||(pNum>=500?'gratis':'18');
-      const total=ses.total||String(deliveryVal==='gratis'?pNum:pNum+(parseFloat(deliveryVal)||0));
+      const deliveryVal=pNum>0?(pNum>=500?'gratis':'18'):(ses.delivery||'18');
+      const total=pNum>0?String(deliveryVal==='gratis'?pNum:pNum+18):(ses.total||'');
       ses.delivery=deliveryVal;ses.total=String(total);
       showCOD(total);
       if(ses.leadFired){await fireUpdate('payment_changed_to_cod',{payment_method:'cod',total});}
@@ -796,8 +813,8 @@
         ses.paymentLinkSent=true;
         if(ses.paymentMethod==='cod'){
           const pNum=parseFloat(ses.price)||0;
-          const deliveryVal=ses.delivery||(pNum>=500?'gratis':'18');
-          const total=ses.total||String(deliveryVal==='gratis'?pNum:pNum+(parseFloat(deliveryVal)||0));
+          const deliveryVal=pNum>0?(pNum>=500?'gratis':'18'):(ses.delivery||'18');
+          const total=pNum>0?String(deliveryVal==='gratis'?pNum:pNum+18):(ses.total||'');
           ses.delivery=deliveryVal;ses.total=String(total);
           showCOD(total);
           fireLead();
