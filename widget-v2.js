@@ -36,6 +36,8 @@
     .sg-hav{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0;}
     .sg-htxt{flex:1;min-width:0;}
     .sg-hname{color:#fff;font-size:14px;font-weight:600;}
+
+    .sg-hname::after{content:'24/7';display:inline-block;margin-left:7px;padding:2px 6px;border-radius:999px;background:rgba(104,211,145,.18);color:#b7f5c8;font-size:10px;font-weight:800;vertical-align:middle;letter-spacing:.2px;}
     .sg-hsub{color:rgba(255,255,255,.6);font-size:11px;margin-top:2px;display:flex;align-items:center;gap:5px;}
     .sg-online{width:6px;height:6px;background:#68d391;border-radius:50%;animation:sg-pulse 2s infinite;}
     @keyframes sg-pulse{0%,100%{opacity:1}50%{opacity:.4}}
@@ -111,16 +113,16 @@
         <div id="sg-hd">
           <div class="sg-hav">M</div>
           <div class="sg-htxt">
-            <div class="sg-hname">Marta — Doradca</div>
-            <div class="sg-hsub"><span class="sg-online"></span>elastyczne-szklo.com</div>
+            <div class="sg-hname">Marta — Czat 24/7</div>
+            <div class="sg-hsub"><span class="sg-online"></span>online 24/7 · elastyczne-szklo.com</div>
           </div>
           <button id="sg-x">✕</button>
         </div>
         <div id="sg-sid">ID czatu: ${SID}</div>
         <div id="sg-trust">
-          <span class="sg-ti">✓ 100 000+ zamówień</span>
+          <span class="sg-ti">✓ Czat 24/7</span>
+          <span class="sg-ti">✓ Wycena od razu</span>
           <span class="sg-ti">✓ Bezpieczna płatność</span>
-          <span class="sg-ti">✓ Cięcie na wymiar</span>
         </div>
         <div id="sg-log" role="log" aria-live="polite"></div>
         <div id="sg-qr"></div>
@@ -130,9 +132,9 @@
             <svg viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
           </button>
         </div>
-        <div id="sg-pw">elastyczne-szklo.com</div>
+        <div id="sg-pw">czat 24/7 · elastyczne-szklo.com</div>
       </div>
-      <div id="sg-tooltip">Policzę cenę Twojego blatu w 30 sek. 👋</div>
+      <div id="sg-tooltip">Czat 24/7 — policzę cenę w 30 sek. 👋</div>
       <button id="sg-btn">
         <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span id="sg-badge"></span>
@@ -283,7 +285,7 @@
       await new Promise(r=>setTimeout(r,600));
       el('sg-log').querySelector('.sg-typing')?.remove();
       // Nowa wiadomość startowa: pomijamy krok "zamówić/pytanie", od razu typ blatu
-      addBot('Dzień dobry! 👋 Jestem Marta z elastyczne-szklo.com.\n\nPoliczę cenę szkła ochronnego na Pana/Pani blat w mniej niż minutę.\n\nJaki rodzaj blatu?');
+      addBot('Dzień dobry! 👋 Jestem Marta — wirtualny asystent 24/7 z elastyczne-szklo.com.\n\nPoliczę cenę szkła ochronnego na Pana/Pani blat w mniej niż minutę — także wieczorem i w weekend.\n\nJaki rodzaj blatu?');
       addTime();
       setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat','Mam pytanie']);
     }
