@@ -19,6 +19,8 @@
     return '№ ' + String(Math.floor(100000 + Math.random() * 900000));
   }
 
+  const SG_AVATAR = 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20120%20120%22%3E%0A%3Crect%20width%3D%22120%22%20height%3D%22120%22%20rx%3D%2260%22%20fill%3D%22%23f4e6d6%22/%3E%0A%3Ccircle%20cx%3D%2260%22%20cy%3D%2247%22%20r%3D%2223%22%20fill%3D%22%23f2c9a5%22/%3E%0A%3Cpath%20d%3D%22M27%2056c1-27%2016-43%2035-43%2022%200%2035%2017%2034%2046-7-8-14-14-20-22-8%2014-27%2018-49%2019z%22%20fill%3D%22%235b3a2e%22/%3E%0A%3Cpath%20d%3D%22M27%2056c1%2022%209%2039%2033%2039%2020%200%2031-14%2035-36-6%207-12%209-18%209-16%200-29-8-37-22-4%206-8%209-13%2010z%22%20fill%3D%22%235b3a2e%22/%3E%0A%3Ccircle%20cx%3D%2251%22%20cy%3D%2251%22%20r%3D%222.4%22%20fill%3D%22%2330231f%22/%3E%0A%3Ccircle%20cx%3D%2270%22%20cy%3D%2251%22%20r%3D%222.4%22%20fill%3D%22%2330231f%22/%3E%0A%3Cpath%20d%3D%22M51%2066c6%205%2014%205%2020%200%22%20stroke%3D%22%23a6574b%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20fill%3D%22none%22/%3E%0A%3Cpath%20d%3D%22M37%20105c5-18%2016-27%2023-27s19%209%2023%2027%22%20fill%3D%22%231c3d2e%22/%3E%0A%3C/svg%3E';
+
   const CSS = `
     #sg-root{position:fixed;bottom:24px;right:24px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
     #sg-btn{width:58px;height:58px;border-radius:50%;background:#1c3d2e;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.22);transition:transform .2s,box-shadow .2s;position:relative;}
@@ -34,6 +36,7 @@
     #sg-box.hidden{opacity:0;transform:scale(.95) translateY(8px);pointer-events:none;}
     #sg-hd{background:#1c3d2e;padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0;}
     .sg-hav{width:38px;height:38px;border-radius:50%;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;color:#fff;flex-shrink:0;}
+    .sg-photo{background:#f4e6d6 url("${SG_AVATAR}") center/cover no-repeat!important;color:transparent;font-size:0;box-shadow:0 0 0 2px rgba(255,255,255,.14);}
     .sg-htxt{flex:1;min-width:0;}
     .sg-hname{color:#fff;font-size:14px;font-weight:600;}
 
@@ -52,6 +55,7 @@
     .sg-row{display:flex;align-items:flex-end;gap:7px;}
     .sg-row.u{flex-direction:row-reverse;}
     .sg-ava{width:26px;height:26px;border-radius:50%;background:#1c3d2e;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;}
+    .sg-photo-sm{background:#f4e6d6 url("${SG_AVATAR}") center/cover no-repeat!important;color:transparent;font-size:0;}
     .sg-bubble{max-width:78%;padding:9px 13px;font-size:14px;line-height:1.55;word-break:break-word;white-space:pre-wrap;border-radius:14px;}
     .sg-row.b .sg-bubble{background:#fff;color:#1a1a1a;border-bottom-left-radius:3px;box-shadow:0 1px 3px rgba(0,0,0,.08);}
     .sg-row.u .sg-bubble{background:#1c3d2e;color:#fff;border-bottom-right-radius:3px;}
@@ -111,10 +115,10 @@
     r.innerHTML=`
       <div id="sg-box" class="hidden">
         <div id="sg-hd">
-          <div class="sg-hav">M</div>
+          <div class="sg-hav sg-photo" aria-hidden="true"></div>
           <div class="sg-htxt">
-            <div class="sg-hname">Marta — Czat 24/7</div>
-            <div class="sg-hsub"><span class="sg-online"></span>online 24/7 · elastyczne-szklo.com</div>
+            <div class="sg-hname">Marta — doradca online</div>
+            <div class="sg-hsub"><span class="sg-online"></span>dostępna 24/7 · elastyczne-szklo.com</div>
           </div>
           <button id="sg-x">✕</button>
         </div>
@@ -134,7 +138,7 @@
         </div>
         <div id="sg-pw">czat 24/7 · elastyczne-szklo.com</div>
       </div>
-      <div id="sg-tooltip">Czat 24/7 — policzę cenę w 30 sek. 👋</div>
+      <div id="sg-tooltip">Marta jest online 24/7 — policzę cenę w 30 sek. 👋</div>
       <button id="sg-btn">
         <svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         <span id="sg-badge"></span>
@@ -154,7 +158,7 @@
   function addBot(text){
     el('sg-log').querySelector('.sg-typing')?.remove();
     const row=document.createElement('div');row.className='sg-row b';
-    row.innerHTML=`<div class="sg-ava">M</div><div class="sg-bubble">${text.replace(/\n/g,'<br>')}</div>`;
+    row.innerHTML=`<div class="sg-ava sg-photo-sm"></div><div class="sg-bubble">${text.replace(/\n/g,'<br>')}</div>`;
     el('sg-log').appendChild(row);scroll();
   }
   function addUser(text){
@@ -164,7 +168,7 @@
   }
   function showTyping(){
     const row=document.createElement('div');row.className='sg-row b sg-typing';
-    row.innerHTML=`<div class="sg-ava">M</div><div class="sg-bubble"><span class="sg-dots"><span></span><span></span><span></span></span></div>`;
+    row.innerHTML=`<div class="sg-ava sg-photo-sm"></div><div class="sg-bubble"><span class="sg-dots"><span></span><span></span><span></span></span></div>`;
     el('sg-log').appendChild(row);scroll();
   }
   function lock(v){el('sg-ta').disabled=v;el('sg-go').disabled=v;}
@@ -174,48 +178,85 @@
     buttons.forEach(label=>{
       const btn=document.createElement('button');
       btn.className='sg-qbtn';btn.textContent=label;
-      btn.onclick=()=>send(label);
+      btn.onclick=()=>{
+        if(label==='📋 Wklej szablon danych'){
+          const ta=el('sg-ta');
+          ta.value=`Imię i nazwisko:
+Telefon:
+Email:
+Ulica i numer:
+Kod pocztowy:
+Miasto:`;
+          ta.focus();
+          ta.style.height='auto';
+          ta.style.height=Math.min(ta.scrollHeight,80)+'px';
+          return;
+        }
+        if(label==='Nie wiem / pomóż wybrać') return send('Nie wiem, jaki mam rodzaj blatu. Proszę pomóc wybrać wariant.');
+        if(label==='Poleć mi wariant') return send('Proszę polecić najlepszy wariant.');
+        if(label==='Pokaż różnicę') return send('Jaka jest różnica między 1.5mm a 2mm?');
+        if(label==='Nie znam dokładnie') return send('Nie znam dokładnie wymiaru. Proszę podpowiedzieć, jak zmierzyć blat.');
+        if(label==='Mam kilka wymiarów') return send('Mam kilka wymiarów do wyceny.');
+        if(label==='Które wybrać?') return send('Którą metodę płatności lepiej wybrać?');
+        if(label==='Chcę wycenę') return send('Chcę wycenę.');
+        if(label==='Różnica 1.5mm / 2mm') return send('Jaka jest różnica między 1.5mm a 2mm?');
+        if(label==='Dostawa i czas') return send('Jaki jest czas dostawy i koszt dostawy?');
+        if(label==='Zwrot / reklamacja') return send('Jak wygląda zwrot albo reklamacja?');
+        if(label==='Czy się przesuwa?') return send('Czy elastyczne szkło przesuwa się na blacie?');
+        if(label==='Czyszczenie') return send('Jak czyścić elastyczne szkło?');
+        if(label==='Chcę kontakt operatora') return send('Chcę kontakt z operatorem.');
+        if(label==='Mam prosty prostokąt') return send('Mam prosty prostokątny blat.');
+        return send(label);
+      };
       qr.appendChild(btn);
     });
   }
   function clearQR(){el('sg-qr').innerHTML='';}
 
   function detectQR(botText){
-    const questionCount=(botText.match(/[?]/g)||[]).length;
-    if(questionCount>1)return;
-
-    const t=botText.toLowerCase();
+    const t=String(botText||'').toLowerCase();
 
     if(ses.paymentLinkSent)return;
     if(t.includes('przyjęłam zamówienie'))return;
 
-    // Typ blatu — startowe pytanie (nowe: pokazuje się zaraz po przywitaniu)
-    if(t.includes('rodzaj blatu')||t.includes('jaki rodzaj blatu')||t.includes('jaki masz blat')){
-      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat']);
-    // Intensywność
-    } else if(t.includes('intensywnie')&&!t.includes('wymiar')){
-      setQR(['Intensywnie (kuchnia/dzieci)','Rzadziej (biurko/salon)']);
-    // Grubość
-    } else if(t.includes('1.5mm')&&t.includes('2mm')&&!t.includes('wymiar')&&!ses.price){
-      setQR(['1.5mm — tańsze','2mm — mocniejsze']);
-    // Wymiary — popularne rozmiary jako skróty
-    } else if((t.includes('wymiary w cm')||t.includes('proszę podać wymiary')||t.includes('podać wymiary'))&&!ses.price){
-      setQR(['80×60 cm','100×80 cm','120×80 cm','140×80 cm','160×90 cm','Inne wymiary']);
-    // Okrągły?
-    } else if((t.includes('okrągły')||t.includes('jest okrągły'))&&!t.includes('wymiar')){
-      setQR(['Tak, okrągły','Nie, prostokątny']);
-    // Kolejne stoły?
-    } else if(t.includes('inne stoły')||t.includes('inne blaty')||t.includes('jeszcze inne')){
-      setQR(['Tak, mam jeszcze','Nie, to wszystko']);
-    // Metoda płatności
-    } else if((t.includes('jak woli')&&t.includes('zapłaci'))||(t.includes('metod')&&t.includes('płat'))){
-      setQR(['💳 Online (karta/BLIK)','🚚 Za pobraniem']);
-    // Pytanie ogólne — jeśli nie pasuje do nic innego
-    } else if(t.includes('mam pytanie')||t.includes('w czym mogę')){
-      setQR(['Chcę zamówić','Mam pytanie o produkt']);
+    // Metoda płatności — maksymalnie prosto, bo tu klient decyduje jak finalizuje zakup.
+    if((t.includes('jak woli')&&t.includes('zapłaci'))||(t.includes('metod')&&t.includes('płat'))||(t.includes('online')&&t.includes('pobraniem'))){
+      setQR(['💳 BLIK','💳 Karta online','🚚 Za pobraniem','Które wybrać?']);
+    // Dane dostawy — przycisk wkleja gotowy szablon do pola wiadomości.
+    } else if(t.includes('dane do wysyłki')||t.includes('dane do wysylki')||t.includes('imię i nazwisko')||t.includes('imie i nazwisko')||t.includes('kod pocztowy')||t.includes('brakuje jeszcze')||t.includes('telefon:')||t.includes('email:')){
+      setQR(['📋 Wklej szablon danych','📞 Wolę zamówić telefonicznie','Mam pytanie przed podaniem danych']);
+    // Potwierdzenie zamówienia / wyceny.
+    } else if(t.includes('czy potwierdza')||t.includes('potwierdza pan')||t.includes('potwierdza pani')||t.includes('czy chce pan')||t.includes('czy chce pani')||t.includes('złożyć zamówienie')||t.includes('zlozyc zamowienie')){
+      setQR(['Tak, zamawiam','Chcę zmienić wymiar','Mam pytanie','Jeszcze się zastanowię']);
+    // Typ blatu — startowe pytanie.
+    } else if(t.includes('rodzaj blatu')||t.includes('jaki rodzaj blatu')||t.includes('jaki masz blat')||t.includes('drewno matowe')&&t.includes('laminat')){
+      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat','Nie wiem / pomóż wybrać','Mam pytanie']);
+    // Intensywność / zastosowanie.
+    } else if((t.includes('intensywnie')||t.includes('użytkowanie')||t.includes('uzytkowanie')||t.includes('kuchnia')||t.includes('biurko')||t.includes('salon'))&&!t.includes('wymiar')){
+      setQR(['Kuchnia / codziennie','Jadalnia / dzieci','Salon / rzadziej','Biurko','Taras / ogród','Nie wiem']);
+    // Grubość.
+    } else if((t.includes('1.5mm')||t.includes('1,5mm'))&&t.includes('2mm')&&!t.includes('wymiar')&&!ses.price){
+      setQR(['1.5mm — tańsze','2mm — mocniejsze','Poleć mi wariant','Pokaż różnicę','Wyprzedaż -50%']);
+    // Wariant wyprzedażowy.
+    } else if(t.includes('wyprzedaż')||t.includes('wyprzedaz')||t.includes('połowie ceny')||t.includes('polowie ceny')){
+      setQR(['Tak, wyprzedaż -50%','Nie, standardowe','Pokaż cenę standardową']);
+    // Wymiary — więcej skrótów + kilka wymiarów.
+    } else if((t.includes('wymiary w cm')||t.includes('proszę podać wymiary')||t.includes('podaj wymiary')||t.includes('długość')||t.includes('szerokość'))&&!ses.price){
+      setQR(['80×60 cm','90×60 cm','100×80 cm','120×80 cm','120×100 cm','140×80 cm','160×90 cm','Mam kilka wymiarów','Nie znam dokładnie']);
+    // Kwadrat / okrąg / inny kształt.
+    } else if((t.includes('okrągły')||t.includes('jest okrągły')||t.includes('kwadratowy')||t.includes('kwadrat'))&&!t.includes('wymiar')){
+      setQR(['Okrągły','Kwadratowy','Nie wiem','Inny kształt']);
+    // Kolejne stoły.
+    } else if(t.includes('inne stoły')||t.includes('inne blaty')||t.includes('jeszcze inne')||t.includes('czy to wszystko')){
+      setQR(['Tak, mam jeszcze','Nie, to wszystko','Mam kilka wymiarów']);
+    // Niestandardowe kształty.
+    } else if(t.includes('zdjęcia lub rysunku')||t.includes('zdjecia lub rysunku')||t.includes('niestandardowego kształtu')||t.includes('zaokrąglonymi rogami')){
+      setQR(['Wyślę na email','Chcę kontakt operatora','Mam prosty prostokąt']);
+    // Ogólne pytania / FAQ.
+    } else if(t.includes('mam pytanie')||t.includes('w czym mogę')||t.includes('w czym moge')){
+      setQR(['Chcę wycenę','Różnica 1.5mm / 2mm','Czy się przesuwa?','Dostawa i czas','Zwrot / reklamacja','Czyszczenie']);
     }
   }
-
   function clearPaymentUi(){
     el('sg-log').querySelectorAll('#sg-pay-state, .sg-pay-loading, .sg-pay-ready').forEach(n=>n.remove());
   }
@@ -285,9 +326,9 @@
       await new Promise(r=>setTimeout(r,600));
       el('sg-log').querySelector('.sg-typing')?.remove();
       // Nowa wiadomość startowa: pomijamy krok "zamówić/pytanie", od razu typ blatu
-      addBot('Dzień dobry! 👋 Jestem Marta — wirtualny asystent 24/7 z elastyczne-szklo.com.\n\nPoliczę cenę szkła ochronnego na Pana/Pani blat w mniej niż minutę — także wieczorem i w weekend.\n\nJaki rodzaj blatu?');
+      addBot('Dzień dobry! 👋 Tu Marta z elastyczne-szklo.com.\n\nPomogę dobrać wariant i policzę cenę szkła ochronnego na Pana/Pani blat w mniej niż minutę — także wieczorem i w weekend.\n\nJaki rodzaj blatu?');
       addTime();
-      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat','Mam pytanie']);
+      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat','Nie wiem / pomóż wybrać','Mam pytanie']);
     }
     el('sg-ta').focus();
   }
