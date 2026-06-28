@@ -219,40 +219,54 @@ Miasto:`;
     if(ses.paymentLinkSent)return;
     if(t.includes('przyjęłam zamówienie'))return;
 
-    // Metoda płatności — maksymalnie prosto, bo tu klient decyduje jak finalizuje zakup.
-    if((t.includes('jak woli')&&t.includes('zapłaci'))||(t.includes('metod')&&t.includes('płat'))||(t.includes('online')&&t.includes('pobraniem'))){
-      setQR(['💳 BLIK','💳 Karta online','🚚 Za pobraniem','Które wybrać?']);
-    // Dane dostawy — przycisk wkleja gotowy szablon do pola wiadomości.
-    } else if(t.includes('dane do wysyłki')||t.includes('dane do wysylki')||t.includes('imię i nazwisko')||t.includes('imie i nazwisko')||t.includes('kod pocztowy')||t.includes('brakuje jeszcze')||t.includes('telefon:')||t.includes('email:')){
+    // 1) Dane dostawy — dopiero po potwierdzeniu zamówienia.
+    // Przycisk wkleja gotowy szablon do pola wiadomości.
+    if(t.includes('dane do wysyłki')||t.includes('dane do wysylki')||t.includes('proszę skopiować')||t.includes('prosze skopiowac')||t.includes('imię i nazwisko')||t.includes('imie i nazwisko')||t.includes('kod pocztowy')||t.includes('brakuje jeszcze')||t.includes('telefon:')||t.includes('email:')){
       setQR(['📋 Wklej szablon danych','📞 Wolę zamówić telefonicznie','Mam pytanie przed podaniem danych']);
-    // Potwierdzenie zamówienia / wyceny.
-    } else if(t.includes('czy potwierdza')||t.includes('potwierdza pan')||t.includes('potwierdza pani')||t.includes('czy chce pan')||t.includes('czy chce pani')||t.includes('złożyć zamówienie')||t.includes('zlozyc zamowienie')){
-      setQR(['Tak, zamawiam','Chcę zmienić wymiar','Mam pytanie','Jeszcze się zastanowię']);
-    // Typ blatu — startowe pytanie.
-    } else if(t.includes('rodzaj blatu')||t.includes('jaki rodzaj blatu')||t.includes('jaki masz blat')||t.includes('drewno matowe')&&t.includes('laminat')){
-      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat','Nie wiem / pomóż wybrać','Mam pytanie']);
-    // Intensywność / zastosowanie.
-    } else if((t.includes('intensywnie')||t.includes('użytkowanie')||t.includes('uzytkowanie')||t.includes('kuchnia')||t.includes('biurko')||t.includes('salon'))&&!t.includes('wymiar')){
-      setQR(['Kuchnia / codziennie','Jadalnia / dzieci','Salon / rzadziej','Biurko','Taras / ogród','Nie wiem']);
-    // Grubość.
-    } else if((t.includes('1.5mm')||t.includes('1,5mm'))&&t.includes('2mm')&&!t.includes('wymiar')&&!ses.price){
+
+    // 2) Podsumowanie / potwierdzenie zamówienia.
+    // WAŻNE: na tym etapie NIE pokazujemy metod płatności, bo klient nie podał jeszcze danych dostawy.
+    } else if(t.includes('czy potwierdza')||t.includes('potwierdza pan')||t.includes('potwierdza pani')||t.includes('potwierdza pan/pani')||t.includes('czy chce pan')||t.includes('czy chce pani')||t.includes('złożyć zamówienie')||t.includes('zlozyc zamowienie')){
+      setQR(['Tak, potwierdzam','Dodaj kolejny wymiar','Zmień wymiar','Pytanie o dostawę']);
+
+    // 3) Metoda płatności — TYLKO gdy bot naprawdę pyta o sposób zapłaty po danych dostawy.
+    // Nie łapiemy zwykłej linijki z podsumowania typu "bezpieczna płatność online lub za pobraniem".
+    } else if(/(jak|w jaki sposób).{0,45}(zapłaci|zaplaci|płatno|platno)/i.test(t)||t.includes('sposób płatności')||t.includes('sposob platnosci')||t.includes('metodę płatności')||t.includes('metode platnosci')){
+      setQR(['💳 BLIK','💳 Karta online','🚚 Za pobraniem','Które wybrać?']);
+
+    // 4) Grubość — musi być przed intensywnością, bo odpowiedź o kuchni zawiera słowo "kuchni".
+    } else if((t.includes('którą grubość')||t.includes('ktora grubosc')||t.includes('grubość pan/pani')||t.includes('grubosc pan/pani')||((t.includes('1.5mm')||t.includes('1,5mm'))&&t.includes('2mm')&&!t.includes('wymiar')))&&!ses.price){
       setQR(['1.5mm — tańsze','2mm — mocniejsze','Poleć mi wariant','Pokaż różnicę','Wyprzedaż -50%']);
-    // Wariant wyprzedażowy.
-    } else if(t.includes('wyprzedaż')||t.includes('wyprzedaz')||t.includes('połowie ceny')||t.includes('polowie ceny')){
-      setQR(['Tak, wyprzedaż -50%','Nie, standardowe','Pokaż cenę standardową']);
-    // Wymiary — więcej skrótów + kilka wymiarów.
-    } else if((t.includes('wymiary w cm')||t.includes('proszę podać wymiary')||t.includes('podaj wymiary')||t.includes('długość')||t.includes('szerokość'))&&!ses.price){
+
+    // 5) Typ blatu — startowe pytanie.
+    } else if(t.includes('rodzaj blatu')||t.includes('jaki rodzaj blatu')||t.includes('jaki masz blat')||(t.includes('drewno matowe')&&t.includes('laminat'))){
+      setQR(['Drewno matowe','Szkło / lakier / połysk','Laminat','Nie wiem / pomóż wybrać','Mam pytanie']);
+
+    // 6) Intensywność / zastosowanie — tylko gdy bot pyta o rodzaj użytkowania, nie przy rekomendacji grubości.
+    } else if((t.includes('jaki to rodzaj użytkowania')||t.includes('jaki to rodzaj uzytkowania')||t.includes('kuchnia i częste gotowanie')||t.includes('kuchnia i czeste gotowanie')||t.includes('czy raczej biurko')||t.includes('intensywne użytkowanie')||t.includes('intensywne uzytkowanie'))&&!t.includes('którą grubość')&&!t.includes('ktora grubosc')){
+      setQR(['Kuchnia / codziennie','Jadalnia / dzieci','Salon / rzadziej','Biurko','Taras / ogród','Nie wiem']);
+
+    // 7) Wymiary — popularne rozmiary + kilka wymiarów.
+    } else if((t.includes('wymiary w cm')||t.includes('proszę podać wymiary')||t.includes('prosze podac wymiary')||t.includes('podaj wymiary')||t.includes('długość')||t.includes('dlugosc')||t.includes('szerokość')||t.includes('szerokosc'))&&!ses.price){
       setQR(['80×60 cm','90×60 cm','100×80 cm','120×80 cm','120×100 cm','140×80 cm','160×90 cm','Mam kilka wymiarów','Nie znam dokładnie']);
-    // Kwadrat / okrąg / inny kształt.
-    } else if((t.includes('okrągły')||t.includes('jest okrągły')||t.includes('kwadratowy')||t.includes('kwadrat'))&&!t.includes('wymiar')){
+
+    // 8) Kwadrat / okrąg / inny kształt.
+    } else if((t.includes('okrągły')||t.includes('okragly')||t.includes('jest okrągły')||t.includes('kwadratowy')||t.includes('kwadrat'))&&!t.includes('wymiar')){
       setQR(['Okrągły','Kwadratowy','Nie wiem','Inny kształt']);
-    // Kolejne stoły.
+
+    // 9) Kolejne stoły.
     } else if(t.includes('inne stoły')||t.includes('inne blaty')||t.includes('jeszcze inne')||t.includes('czy to wszystko')){
       setQR(['Tak, mam jeszcze','Nie, to wszystko','Mam kilka wymiarów']);
-    // Niestandardowe kształty.
+
+    // 10) Wariant wyprzedażowy.
+    } else if(t.includes('wyprzedaż')||t.includes('wyprzedaz')||t.includes('połowie ceny')||t.includes('polowie ceny')){
+      setQR(['Tak, wyprzedaż -50%','Nie, standardowe','Pokaż cenę standardową']);
+
+    // 11) Niestandardowe kształty.
     } else if(t.includes('zdjęcia lub rysunku')||t.includes('zdjecia lub rysunku')||t.includes('niestandardowego kształtu')||t.includes('zaokrąglonymi rogami')){
       setQR(['Wyślę na email','Chcę kontakt operatora','Mam prosty prostokąt']);
-    // Ogólne pytania / FAQ.
+
+    // 12) Ogólne pytania / FAQ.
     } else if(t.includes('mam pytanie')||t.includes('w czym mogę')||t.includes('w czym moge')){
       setQR(['Chcę wycenę','Różnica 1.5mm / 2mm','Czy się przesuwa?','Dostawa i czas','Zwrot / reklamacja','Czyszczenie']);
     }
