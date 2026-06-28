@@ -206,6 +206,7 @@ Miasto:`;
         if(label==='Czyszczenie') return send('Jak czyścić elastyczne szkło?');
         if(label==='Chcę kontakt operatora') return send('Chcę kontakt z operatorem.');
         if(label==='Mam prosty prostokąt') return send('Mam prosty prostokątny blat.');
+        if(label==='Zmień / dodaj wymiar') return send('Chcę zmienić albo dodać wymiar do zamówienia.');
         return send(label);
       };
       qr.appendChild(btn);
@@ -222,7 +223,7 @@ Miasto:`;
     // 1) Dane dostawy — dopiero po potwierdzeniu zamówienia.
     // Przycisk wkleja gotowy szablon do pola wiadomości.
     if(t.includes('dane do wysyłki')||t.includes('dane do wysylki')||t.includes('proszę skopiować')||t.includes('prosze skopiowac')||t.includes('imię i nazwisko')||t.includes('imie i nazwisko')||t.includes('kod pocztowy')||t.includes('brakuje jeszcze')||t.includes('telefon:')||t.includes('email:')){
-      setQR(['📋 Wklej szablon danych','📞 Wolę zamówić telefonicznie','Mam pytanie przed podaniem danych']);
+      setQR(['📋 Wklej szablon danych','Mam pytanie przed podaniem danych','Zmień / dodaj wymiar']);
 
     // 2) Podsumowanie / potwierdzenie zamówienia.
     // WAŻNE: na tym etapie NIE pokazujemy metod płatności, bo klient nie podał jeszcze danych dostawy.
