@@ -1,7 +1,3 @@
-// Elastyczne Szkło — Chat Widget v2 (fast flow, warm lead, 30s open)
-// FIX 2026-06-17: товар/розміри більше не падають у "уточнюється" —
-// додано getDimsFallback(), який витягує розміри з усього діалогу,
-// якщо бот не показав класичного підсумку з buletами.
 (function () {
   'use strict';
 
