@@ -19,7 +19,7 @@
     return '№ ' + String(Math.floor(100000 + Math.random() * 900000));
   }
 
-  const SG_AVATAR = 'data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%220%200%20120%20120%22%3E%0A%3Crect%20width%3D%22120%22%20height%3D%22120%22%20rx%3D%2260%22%20fill%3D%22%23f4e6d6%22/%3E%0A%3Ccircle%20cx%3D%2260%22%20cy%3D%2247%22%20r%3D%2223%22%20fill%3D%22%23f2c9a5%22/%3E%0A%3Cpath%20d%3D%22M27%2056c1-27%2016-43%2035-43%2022%200%2035%2017%2034%2046-7-8-14-14-20-22-8%2014-27%2018-49%2019z%22%20fill%3D%22%235b3a2e%22/%3E%0A%3Cpath%20d%3D%22M27%2056c1%2022%209%2039%2033%2039%2020%200%2031-14%2035-36-6%207-12%209-18%209-16%200-29-8-37-22-4%206-8%209-13%2010z%22%20fill%3D%22%235b3a2e%22/%3E%0A%3Ccircle%20cx%3D%2251%22%20cy%3D%2251%22%20r%3D%222.4%22%20fill%3D%22%2330231f%22/%3E%0A%3Ccircle%20cx%3D%2270%22%20cy%3D%2251%22%20r%3D%222.4%22%20fill%3D%22%2330231f%22/%3E%0A%3Cpath%20d%3D%22M51%2066c6%205%2014%205%2020%200%22%20stroke%3D%22%23a6574b%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22%20fill%3D%22none%22/%3E%0A%3Cpath%20d%3D%22M37%20105c5-18%2016-27%2023-27s19%209%2023%2027%22%20fill%3D%22%231c3d2e%22/%3E%0A%3C/svg%3E';
+  const SG_AVATAR = 'https://static.tildacdn.com/stor3530-6335-4030-b366-363966383437/5efb2fc2ea144f1ae0d2f12885474f78.jpg';
 
   const CSS = `
     #sg-root{position:fixed;bottom:24px;right:24px;z-index:2147483647;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;}
